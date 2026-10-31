@@ -205,6 +205,11 @@ def create_timeline_figure(
     return fig
 
 
+def _select_evidence(evidence_id: str) -> None:
+    st.session_state["selected_evidence_id"] = evidence_id
+    st.session_state["evidence_lookup_input"] = evidence_id
+
+
 def render_timeline_panel(
     timeline_events: list[TimelineEvent | dict[str, Any]],
     clock_offsets: dict[str, float] | None = None,
@@ -279,9 +284,11 @@ def render_timeline_panel(
                 for ptr in ev.evidence:
                     b_col, n_col = st.columns([1.2, 3])
                     with b_col:
-                        if st.button(f"🔍 {ptr.id}", key=f"btn_tl_panel_{ev.order}_{ptr.id}"):
-                            st.session_state["selected_evidence_id"] = ptr.id
-                            st.session_state["evidence_lookup_input"] = ptr.id
-                            st.rerun()
+                        st.button(
+                            f"🔍 {ptr.id}",
+                            key=f"btn_tl_panel_{ev.order}_{ptr.id}",
+                            on_click=_select_evidence,
+                            args=(ptr.id,),
+                        )
                     with n_col:
                         st.caption(f"[{ptr.kind}] *{ptr.note}*")

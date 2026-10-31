@@ -233,3 +233,21 @@ def test_evidence_lookup_session_sync():
     at.run()
     assert not at.exception
     assert at.text_input(key="evidence_lookup_input").value == "span-gw-3"
+
+
+def test_evidence_button_click_in_post_mortem():
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(str(ROOT_DIR / "ui" / "app.py"), default_timeout=30)
+    at.run()
+    assert not at.exception
+
+    # Find evidence buttons (buttons starting with 🔍)
+    evidence_buttons = [b for b in at.button if "🔍" in b.label]
+    assert len(evidence_buttons) > 0, "Expected evidence buttons in rendered report"
+
+    # Click the first evidence button to verify on_click callback execution
+    evidence_buttons[0].click().run()
+    assert not at.exception, f"Clicking evidence button caused exception: {at.exception}"
+    assert at.session_state["selected_evidence_id"] != ""
+    assert at.session_state["evidence_lookup_input"] == at.session_state["selected_evidence_id"]

@@ -404,21 +404,24 @@ def render_raw_telemetry_panel(db_path: str | Path) -> None:
         "gateway.error_rate_5xx@1700000095000",
     ]
 
+    def _on_sample_select() -> None:
+        val = st.session_state.get("quick_evidence_sample", "")
+        if val:
+            st.session_state["evidence_lookup_input"] = val
+            st.session_state["selected_evidence_id"] = val
+
     col_input, col_sample = st.columns([1.5, 1])
     with col_sample:
-        selected_sample = st.selectbox(
+        st.selectbox(
             "Quick Select Sample Evidence",
             sample_ids,
             key="quick_evidence_sample",
+            on_change=_on_sample_select,
         )
-        if selected_sample and selected_sample != st.session_state.get("evidence_lookup_input", ""):
-            st.session_state["evidence_lookup_input"] = selected_sample
-            st.session_state["selected_evidence_id"] = selected_sample
 
     with col_input:
         evidence_id_input = st.text_input(
             "Evidence ID (span_id, log_id, or metric@timestamp)",
-            value=st.session_state.get("evidence_lookup_input", ""),
             placeholder="e.g. span-gw-3 or log-auth-5",
             key="evidence_lookup_input",
         )

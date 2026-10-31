@@ -18,3 +18,4 @@ data/*.sqlite3
 data/incident.db
 .DS_Store
 Thumbs.db
+.agents/

@@ -9,6 +9,11 @@ import streamlit as st
 from contracts.models import IncidentReport
 
 
+def _select_evidence(evidence_id: str) -> None:
+    st.session_state["selected_evidence_id"] = evidence_id
+    st.session_state["evidence_lookup_input"] = evidence_id
+
+
 def render_post_mortem_panel(
     report: IncidentReport | dict[str, Any] | None,
 ) -> None:
@@ -87,10 +92,12 @@ def render_post_mortem_panel(
                 st.markdown(f"**Supporting Evidence ({len(h.supporting)}):**")
                 if h.supporting:
                     for ptr in h.supporting:
-                        if st.button(f"🔍 {ptr.id}", key=f"btn_supp_{h.id}_{ptr.id}"):
-                            st.session_state["selected_evidence_id"] = ptr.id
-                            st.session_state["evidence_lookup_input"] = ptr.id
-                            st.rerun()
+                        st.button(
+                            f"🔍 {ptr.id}",
+                            key=f"btn_supp_{h.id}_{ptr.id}",
+                            on_click=_select_evidence,
+                            args=(ptr.id,),
+                        )
                         st.caption(f"↳ *{ptr.note}*")
                 else:
                     st.caption("None cited.")
@@ -99,10 +106,12 @@ def render_post_mortem_panel(
                 st.markdown(f"**Refuting Evidence ({len(h.refuting)}):**")
                 if h.refuting:
                     for ptr in h.refuting:
-                        if st.button(f"🔍 {ptr.id}", key=f"btn_ref_{h.id}_{ptr.id}"):
-                            st.session_state["selected_evidence_id"] = ptr.id
-                            st.session_state["evidence_lookup_input"] = ptr.id
-                            st.rerun()
+                        st.button(
+                            f"🔍 {ptr.id}",
+                            key=f"btn_ref_{h.id}_{ptr.id}",
+                            on_click=_select_evidence,
+                            args=(ptr.id,),
+                        )
                         st.caption(f"↳ *{ptr.note}*")
                 else:
                     st.caption("None cited.")
@@ -126,10 +135,12 @@ def render_post_mortem_panel(
                 for ptr in ev.evidence:
                     b_col, n_col = st.columns([1, 3])
                     with b_col:
-                        if st.button(f"🔍 {ptr.id}", key=f"btn_tl_{ev.order}_{ptr.id}"):
-                            st.session_state["selected_evidence_id"] = ptr.id
-                            st.session_state["evidence_lookup_input"] = ptr.id
-                            st.rerun()
+                        st.button(
+                            f"🔍 {ptr.id}",
+                            key=f"btn_tl_{ev.order}_{ptr.id}",
+                            on_click=_select_evidence,
+                            args=(ptr.id,),
+                        )
                     with n_col:
                         st.write(f"*{ptr.note}*")
 
