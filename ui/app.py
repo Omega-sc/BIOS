@@ -5,13 +5,19 @@ Track 09 — Multi-Service Post-Mortem & Timeline Reconstruction Under Telemetry
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
-import streamlit as st
+# Ensure project root is on sys.path when executed directly via `streamlit run ui/app.py`
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
-from agent.runner import run_investigation
-from contracts.models import AgentEvent, IncidentReport
-from ui.panels import (
+import streamlit as st  # noqa: E402
+
+from agent.runner import run_investigation  # noqa: E402
+from contracts.models import AgentEvent, IncidentReport  # noqa: E402
+from ui.panels import (  # noqa: E402
     render_agent_stream_panel,
     render_counterfactual_panel,
     render_dag_panel,
