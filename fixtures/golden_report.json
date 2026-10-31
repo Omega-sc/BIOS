@@ -1,0 +1,185 @@
+{
+  "schema_version": "1.0",
+  "timeline_events": [
+    {
+      "order": 1,
+      "t_corrected_ms": 1700000000000,
+      "service": "db-pool",
+      "description": "Baseline connection pool utilization is healthy at 2 of 20 active connections.",
+      "claim_type": "verified_fact",
+      "evidence": [
+        {
+          "kind": "metric",
+          "id": "db_pool.active_connections@1700000000000",
+          "note": "Initial connection pool metric reading"
+        }
+      ]
+    },
+    {
+      "order": 2,
+      "t_corrected_ms": 1700000090000,
+      "service": "db-pool",
+      "description": "Connection pool hits full saturation (20/20 active connections).",
+      "claim_type": "verified_fact",
+      "evidence": [
+        {
+          "kind": "metric",
+          "id": "db_pool.active_connections@1700000090000",
+          "note": "Pool capacity ceiling reached"
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "t_corrected_ms": 1700000095000,
+      "service": "gateway",
+      "description": "Gateway begins returning HTTP 504 timeouts to citizens due to auth-service upstream delay.",
+      "claim_type": "verified_fact",
+      "evidence": [
+        {
+          "kind": "span",
+          "id": "span-gw-3",
+          "note": "First observed 504 status code span on gateway"
+        },
+        {
+          "kind": "metric",
+          "id": "gateway.error_rate_5xx@1700000095000",
+          "note": "5xx error rate spikes from 0 to 0.65"
+        }
+      ]
+    },
+    {
+      "order": 4,
+      "t_corrected_ms": 1700000100020,
+      "service": "auth-service",
+      "description": "Auth-service fails to acquire database connection before timeout due to connection leak on unhandled error paths.",
+      "claim_type": "inference",
+      "evidence": [
+        {
+          "kind": "log",
+          "id": "log-auth-3",
+          "note": "Log line confirming pool exhausted (20/20 active) at corrected timestamp"
+        },
+        {
+          "kind": "log",
+          "id": "log-auth-5",
+          "note": "Log line confirming unhandled exception skipped release()"
+        }
+      ]
+    },
+    {
+      "order": 5,
+      "t_corrected_ms": 1700000125000,
+      "service": "frontend",
+      "description": "Frontend CPU spikes to 88.5% due to aggressive client retry storm following gateway 504s.",
+      "claim_type": "verified_fact",
+      "evidence": [
+        {
+          "kind": "metric",
+          "id": "frontend.cpu_pct@1700000125000",
+          "note": "CPU onset lagged gateway 504 onset by 30 seconds"
+        },
+        {
+          "kind": "log",
+          "id": "log-fe-1",
+          "note": "Client log indicating exponential backoff retry storm initiated"
+        }
+      ]
+    }
+  ],
+  "hypotheses_evaluated": [
+    {
+      "id": "H1",
+      "statement": "auth-service leaks DB connections on error path, exhausting db-pool and causing gateway 504 timeouts.",
+      "confidence": 0.94,
+      "verdict": "root_cause",
+      "supporting": [
+        {
+          "kind": "metric",
+          "id": "db_pool.active_connections@1700000090000",
+          "note": "Active connections reached pool max 20 before any 504s occurred"
+        },
+        {
+          "kind": "log",
+          "id": "log-auth-5",
+          "note": "Explicit leak detected in auth-service token validator"
+        }
+      ],
+      "refuting": [],
+      "counterfactual": {
+        "intervention": "fix_leak",
+        "baseline_failure_prob": 0.89,
+        "intervened_failure_prob": 0.01,
+        "ci95": [0.00, 0.02],
+        "n_runs": 300,
+        "model_assumptions": [
+          "Discrete event queue model of connection pool",
+          "Error path releases connection immediately",
+          "Steady state arrival rate 10 req/s"
+        ]
+      }
+    },
+    {
+      "id": "H2",
+      "statement": "Frontend CPU exhaustion caused slow request processing and subsequent gateway timeouts.",
+      "confidence": 0.08,
+      "verdict": "rejected",
+      "supporting": [
+        {
+          "kind": "metric",
+          "id": "frontend.cpu_pct@1700000125000",
+          "note": "High CPU utilization observed during incident"
+        }
+      ],
+      "refuting": [
+        {
+          "kind": "metric",
+          "id": "gateway.error_rate_5xx@1700000095000",
+          "note": "Gateway errors began 30 seconds before frontend CPU elevated"
+        }
+      ],
+      "counterfactual": {
+        "intervention": "no_retries",
+        "baseline_failure_prob": 0.89,
+        "intervened_failure_prob": 0.85,
+        "ci95": [0.81, 0.89],
+        "n_runs": 300,
+        "model_assumptions": [
+          "Eliminating frontend retries does not restore leaked db connections"
+        ]
+      }
+    }
+  ],
+  "evidence_pointers": [
+    {
+      "kind": "metric",
+      "id": "db_pool.active_connections@1700000090000",
+      "note": "db_pool saturated at t=90s"
+    },
+    {
+      "kind": "span",
+      "id": "span-gw-3",
+      "note": "First 504 gateway response at t=95s"
+    },
+    {
+      "kind": "metric",
+      "id": "frontend.cpu_pct@1700000125000",
+      "note": "Frontend CPU elevated at t=125s"
+    },
+    {
+      "kind": "log",
+      "id": "log-auth-5",
+      "note": "Auth service leak signature"
+    }
+  ],
+  "estimated_clock_offsets_s": {
+    "auth-service": 12.0,
+    "gateway": 0.0,
+    "db-pool": 0.0
+  },
+  "remediation": [
+    "Wrap db connection acquisition in try-finally or context manager to guarantee release() on all exit paths.",
+    "Introduce circuit breaker at gateway to shed load when auth-service latency degrades.",
+    "Add alert on db_pool.active_connections > 80% saturation."
+  ]
+}

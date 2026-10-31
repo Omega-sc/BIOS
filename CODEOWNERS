@@ -1,0 +1,34 @@
+# Component ownership for Track 09 4-agent build
+contracts/              @p1
+datagen/                @p1
+ingest/                 @p1
+eval/                   @p1
+data/                   @p1
+fixtures/               @p1
+.github/                @p1
+Makefile                @p1
+README.md               @p1
+pyproject.toml          @p1
+.gitignore              @p1
+.gitattributes          @p1
+CODEOWNERS              @p1
+.env.example            @p1
+requirements/p1.txt     @p1
+requirements/base.txt   @p1
+
+tools/                  @p2
+sim/                    @p2
+requirements/p2.txt     @p2
+
+agent/                  @p3
+fixtures/replay/        @p3
+requirements/p3.txt     @p3
+
+ui/                     @p4
+docs/                   @p4
+requirements/p4.txt     @p4
+
+status/p1.md            @p1
+status/p2.md            @p2
+status/p3.md            @p3
+status/p4.md            @p4

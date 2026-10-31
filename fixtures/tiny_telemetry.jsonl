@@ -1,0 +1,44 @@
+{"type":"metric","service":"db-pool","metric":"db_pool.active_connections","ts_ms":1700000000000,"value":2.0}
+{"type":"metric","service":"db-pool","metric":"db_pool.wait_queue_len","ts_ms":1700000000000,"value":0.0}
+{"type":"metric","service":"auth-service","metric":"auth.latency_p99","ts_ms":1700000012000,"value":45.0}
+{"type":"metric","service":"gateway","metric":"gateway.error_rate_5xx","ts_ms":1700000000000,"value":0.0}
+{"type":"metric","service":"frontend","metric":"frontend.cpu_pct","ts_ms":1700000000000,"value":12.0}
+{"type":"span","span_id":"span-gw-1","trace_id":"trace-1","parent_span_id":null,"service":"gateway","name":"GET /auth/verify","start_ms":1700000001000,"end_ms":1700000001060,"status_code":200,"attrs":{"http.method":"GET"}}
+{"type":"span","span_id":"span-auth-1","trace_id":"trace-1","parent_span_id":"span-gw-1","service":"auth-service","name":"verify_token","start_ms":1700000013010,"end_ms":1700000013050,"status_code":200,"attrs":{}}
+{"type":"span","span_id":"span-db-1","trace_id":"trace-1","parent_span_id":"span-auth-1","service":"db-pool","name":"acquire_connection","start_ms":1700000001020,"end_ms":1700000001040,"status_code":200,"attrs":{}}
+{"type":"log","log_id":"log-gw-1","trace_id":"trace-1","span_id":"span-gw-1","service":"gateway","ts_ms":1700000001005,"level":"INFO","message":"Incoming verify request"}
+{"type":"log","log_id":"log-auth-1","trace_id":"trace-1","span_id":"span-auth-1","service":"auth-service","ts_ms":1700000013015,"level":"INFO","message":"Token parsed successfully"}
+{"type":"metric","service":"db-pool","metric":"db_pool.active_connections","ts_ms":1700000030000,"value":8.0}
+{"type":"metric","service":"db-pool","metric":"db_pool.wait_queue_len","ts_ms":1700000030000,"value":1.0}
+{"type":"metric","service":"auth-service","metric":"auth.latency_p99","ts_ms":1700000042000,"value":120.0}
+{"type":"span","span_id":"span-gw-2","trace_id":"trace-2","parent_span_id":null,"service":"gateway","name":"GET /auth/verify","start_ms":1700000031000,"end_ms":1700000031150,"status_code":200,"attrs":{"http.method":"GET"}}
+{"type":"span","span_id":"span-auth-2","trace_id":"trace-2","parent_span_id":"span-gw-2","service":"auth-service","name":"verify_token","start_ms":1700000043010,"end_ms":1700000043130,"status_code":200,"attrs":{}}
+{"type":"span","span_id":"span-db-2","trace_id":"trace-2","parent_span_id":"span-auth-2","service":"db-pool","name":"acquire_connection","start_ms":1700000031020,"end_ms":1700000031110,"status_code":200,"attrs":{}}
+{"type":"log","log_id":"log-auth-2","trace_id":"trace-2","span_id":"span-auth-2","service":"auth-service","ts_ms":1700000043030,"level":"WARN","message":"Connection pool acquisition took 90ms"}
+{"type":"metric","service":"db-pool","metric":"db_pool.active_connections","ts_ms":1700000090000,"value":20.0}
+{"type":"metric","service":"db-pool","metric":"db_pool.wait_queue_len","ts_ms":1700000090000,"value":15.0}
+{"type":"metric","service":"auth-service","metric":"auth.latency_p99","ts_ms":1700000102000,"value":5200.0}
+{"type":"metric","service":"gateway","metric":"gateway.error_rate_5xx","ts_ms":1700000095000,"value":0.65}
+{"type":"span","span_id":"span-gw-3","trace_id":"trace-3","parent_span_id":null,"service":"gateway","name":"GET /auth/verify","start_ms":1700000095000,"end_ms":1700000098000,"status_code":504,"attrs":{"http.method":"GET"}}
+{"type":"span","span_id":"span-auth-3","trace_id":"trace-3","parent_span_id":"span-gw-3","service":"auth-service","name":"verify_token","start_ms":1700000107010,"end_ms":1700000112020,"status_code":500,"attrs":{"error":"PoolTimeout"}}
+{"type":"span","span_id":"span-db-3","trace_id":"trace-3","parent_span_id":"span-auth-3","service":"db-pool","name":"acquire_connection","start_ms":1700000095020,"end_ms":1700000100020,"status_code":500,"attrs":{"error":"TimeoutExpired"}}
+{"type":"log","log_id":"log-auth-3","trace_id":"trace-3","span_id":"span-auth-3","service":"auth-service","ts_ms":1700000112015,"level":"ERROR","message":"Failed to acquire DB connection: pool exhausted (20/20 active)"}
+{"type":"log","log_id":"log-gw-3","trace_id":"trace-3","span_id":"span-gw-3","service":"gateway","ts_ms":1700000098005,"level":"ERROR","message":"Upstream auth-service timed out after 3000ms, returning 504"}
+{"type":"metric","service":"frontend","metric":"frontend.cpu_pct","ts_ms":1700000125000,"value":88.5}
+{"type":"log","log_id":"log-fe-1","trace_id":null,"span_id":null,"service":"frontend","ts_ms":1700000126000,"level":"WARN","message":"Gateway 504 received, initiating exponential backoff retry storm"}
+{"type":"metric","service":"db-pool","metric":"db_pool.active_connections","ts_ms":1700000150000,"value":20.0}
+{"type":"metric","service":"db-pool","metric":"db_pool.wait_queue_len","ts_ms":1700000150000,"value":28.0}
+{"type":"metric","service":"gateway","metric":"gateway.error_rate_5xx","ts_ms":1700000150000,"value":0.88}
+{"type":"metric","service":"frontend","metric":"frontend.cpu_pct","ts_ms":1700000150000,"value":94.0}
+{"type":"span","span_id":"span-gw-4","trace_id":"trace-4","parent_span_id":null,"service":"gateway","name":"GET /auth/verify","start_ms":1700000151000,"end_ms":1700000154000,"status_code":504,"attrs":{"http.method":"GET"}}
+{"type":"span","span_id":"span-auth-4","trace_id":"trace-4","parent_span_id":"span-gw-4","service":"auth-service","name":"verify_token","start_ms":1700000163010,"end_ms":1700000168010,"status_code":500,"attrs":{"error":"PoolTimeout"}}
+{"type":"log","log_id":"log-gw-4","trace_id":"trace-4","span_id":"span-gw-4","service":"gateway","ts_ms":1700000154005,"level":"ERROR","message":"Gateway 504 on trace-4"}
+{"type":"metric","service":"db-pool","metric":"db_pool.active_connections","ts_ms":1700000210000,"value":20.0}
+{"type":"metric","service":"gateway","metric":"gateway.error_rate_5xx","ts_ms":1700000210000,"value":0.92}
+{"type":"metric","service":"frontend","metric":"frontend.cpu_pct","ts_ms":1700000210000,"value":96.0}
+{"type":"span","span_id":"span-gw-5","trace_id":"trace-5","parent_span_id":null,"service":"gateway","name":"GET /auth/verify","start_ms":1700000211000,"end_ms":1700000214000,"status_code":504,"attrs":{"http.method":"GET"}}
+{"type":"log","log_id":"log-auth-5","trace_id":"trace-5","span_id":null,"service":"auth-service","ts_ms":1700000223050,"level":"ERROR","message":"Connection leak: unhandled exception in token validator skipped release()"}
+{"type":"metric","service":"db-pool","metric":"db_pool.active_connections","ts_ms":1700000300000,"value":20.0}
+{"type":"metric","service":"gateway","metric":"gateway.error_rate_5xx","ts_ms":1700000300000,"value":0.95}
+{"type":"metric","service":"frontend","metric":"frontend.cpu_pct","ts_ms":1700000300000,"value":95.0}
+{"type":"log","log_id":"log-db-5","trace_id":null,"span_id":null,"service":"db-pool","ts_ms":1700000300000,"level":"ERROR","message":"Pool exhausted for >200 seconds; all 20 connections occupied"}
