@@ -1,208 +1,216 @@
-"""Tools API definitions for Track 09 incident investigation."""
+"""Tools API definitions and tool registry for Track 09 incident investigation."""
+
+from __future__ import annotations
 
 import json
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import networkx as nx
 
-from contracts.models import MetricOnset, Span
-
-GOLDEN_REPORT_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "golden_report.json"
-
-
-def _load_golden_report() -> dict:
-    if GOLDEN_REPORT_PATH.exists():
-        with open(GOLDEN_REPORT_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+from tools.dag import build_dependency_dag, failure_frontier, to_node_link_json
+from tools.metrics import get_metric_derivatives, rank_metric_onsets
+from tools.skew import estimate_clock_offsets
+from tools.spans import query_spans
 
 
-def estimate_clock_offsets(db: str | Path | sqlite3.Connection) -> dict[str, float]:
-    """Estimate clock offset in seconds per service.
-
-    Returns computed or fixture-based clock offsets. auth-service has ~12.0s skew.
-    """
-    report = _load_golden_report()
-    return report.get(
-        "estimated_clock_offsets_s", {"auth-service": 12.0, "gateway": 0.0, "db-pool": 0.0}
-    )
+def tool_estimate_clock_offsets(db: str | Path | sqlite3.Connection) -> dict[str, float]:
+    """Return JSON-serializable dictionary of estimated per-service clock offsets in seconds."""
+    return estimate_clock_offsets(db)
 
 
-def query_spans(
+def tool_query_spans(
     db: str | Path | sqlite3.Connection,
     service: str | None = None,
     status_code: int | None = None,
-    time_window: tuple[int, int] | None = None,
+    time_window: tuple[int, int] | list[int] | None = None,
     trace_id: str | None = None,
     causal: bool = True,
-) -> list[Span]:
-    """Query spans from the database with filtering and optional clock correction."""
-    spans: list[Span] = []
-    conn = db if isinstance(db, sqlite3.Connection) else sqlite3.connect(str(db))
-    try:
-        query = "SELECT span_id, trace_id, parent_span_id, service, name, start_ms, end_ms, status_code, attrs FROM spans WHERE 1=1"
-        params: list[object] = []
-        if service:
-            query += " AND service = ?"
-            params.append(service)
-        if status_code is not None:
-            query += " AND status_code = ?"
-            params.append(status_code)
-        if trace_id:
-            query += " AND trace_id = ?"
-            params.append(trace_id)
-        if time_window:
-            query += " AND start_ms >= ? AND end_ms <= ?"
-            params.extend([time_window[0], time_window[1]])
-        query += " ORDER BY start_ms ASC"
-
-        cursor = conn.cursor()
-        for row in cursor.execute(query, params):
-            attrs = json.loads(row[8]) if row[8] else {}
-            # Apply clock correction for auth-service if causal
-            corr = 12_000 if causal and row[3] == "auth-service" else 0
-            spans.append(
-                Span(
-                    span_id=row[0],
-                    trace_id=row[1],
-                    parent_span_id=row[2],
-                    service=row[3],
-                    name=row[4],
-                    start_ms=row[5],
-                    end_ms=row[6],
-                    status_code=row[7],
-                    attrs=attrs,
-                    t_corrected_start_ms=row[5] - corr if causal else row[5],
-                )
-            )
-    except Exception:
-        # Fallback stub span if db query fails or before db creation
-        spans = [
-            Span(
-                span_id="span-gw-3",
-                trace_id="trace-3",
-                parent_span_id=None,
-                service="gateway",
-                name="GET /auth/verify",
-                start_ms=1700000095000,
-                end_ms=1700000098000,
-                status_code=504,
-                attrs={"http.method": "GET"},
-                t_corrected_start_ms=1700000095000,
-            )
-        ]
-    finally:
-        if not isinstance(db, sqlite3.Connection):
-            conn.close()
-    return spans
-
-
-def get_metric_derivatives(db: str | Path | sqlite3.Connection, metric_name: str) -> MetricOnset:
-    """Compute onset inflection and peak slope for a given metric."""
-    mapping = {
-        "db_pool.active_connections": MetricOnset(
-            metric="db_pool.active_connections",
-            service="db-pool",
-            onset_corrected_ms=1700000090000,
-            peak_slope=0.85,
-            z_score=4.8,
-            baseline_mean=2.0,
-            baseline_std=0.5,
-        ),
-        "gateway.error_rate_5xx": MetricOnset(
-            metric="gateway.error_rate_5xx",
-            service="gateway",
-            onset_corrected_ms=1700000095000,
-            peak_slope=0.65,
-            z_score=5.2,
-            baseline_mean=0.0,
-            baseline_std=0.01,
-        ),
-        "frontend.cpu_pct": MetricOnset(
-            metric="frontend.cpu_pct",
-            service="frontend",
-            onset_corrected_ms=1700000125000,
-            peak_slope=2.4,
-            z_score=6.1,
-            baseline_mean=12.0,
-            baseline_std=1.2,
-        ),
-    }
-    return mapping.get(
-        metric_name,
-        MetricOnset(
-            metric=metric_name,
-            service="db-pool",
-            onset_corrected_ms=1700000090000,
-            peak_slope=1.0,
-            z_score=3.0,
-            baseline_mean=0.0,
-            baseline_std=1.0,
-        ),
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Return JSON-serializable summary of queried spans, capped to avoid giant dumps."""
+    cap = min(limit or 50, 100)
+    spans = query_spans(
+        db,
+        service=service,
+        status_code=status_code,
+        time_window=time_window,
+        trace_id=trace_id,
+        causal=causal,
+        limit=cap,
     )
+    return {
+        "count": len(spans),
+        "limit": cap,
+        "orphan_count": sum(1 for s in spans if s.orphan),
+        "spans": [s.model_dump() for s in spans],
+    }
 
 
-def rank_metric_onsets(db: str | Path | sqlite3.Connection) -> list[MetricOnset]:
-    """Rank metric onsets chronologically."""
-    metrics = ["db_pool.active_connections", "gateway.error_rate_5xx", "frontend.cpu_pct"]
-    onsets = [get_metric_derivatives(db, m) for m in metrics]
-    return sorted(onsets, key=lambda o: o.onset_corrected_ms or float("inf"))
+def tool_get_metric_derivatives(
+    db: str | Path | sqlite3.Connection, metric_name: str
+) -> dict[str, Any]:
+    """Return JSON-serializable summary of numerical derivative inflection and baseline stats."""
+    onset = get_metric_derivatives(db, metric_name)
+    return onset.model_dump()
 
 
-def build_dependency_dag(db: str | Path | sqlite3.Connection) -> nx.DiGraph:
-    """Build directed acyclic graph of service call dependencies."""
-    g = nx.DiGraph()
-    g.add_edge("gateway", "auth-service")
-    g.add_edge("auth-service", "db-pool")
-    g.add_edge("frontend", "gateway")
-    return g
+def tool_rank_metric_onsets(db: str | Path | sqlite3.Connection) -> list[dict[str, Any]]:
+    """Return JSON-serializable list of ranked metric onsets."""
+    onsets = rank_metric_onsets(db)
+    return [o.model_dump() for o in onsets]
 
 
-def failure_frontier(dag: nx.DiGraph) -> str:
-    """Identify the earliest failing service boundary along the dependency path."""
-    return "auth-service -> db-pool"
+def tool_build_dependency_dag(db: str | Path | sqlite3.Connection) -> dict[str, Any]:
+    """Return JSON-serializable node-link summary of service dependency DAG."""
+    dag = build_dependency_dag(db)
+    return json.loads(to_node_link_json(dag))
 
 
-def get_tool_specs() -> list[dict]:
-    """Return JSON tool specifications for LLM agent integration."""
+def tool_failure_frontier(
+    dag: nx.DiGraph | dict[str, Any] | None = None,
+    db: str | Path | sqlite3.Connection | None = None,
+) -> dict[str, str]:
+    """Return JSON-serializable failure frontier boundary description."""
+    frontier = failure_frontier(dag, db=db)
+    return {"failure_frontier": frontier}
+
+
+def tool_to_node_link_json(dag: nx.DiGraph) -> str:
+    """Return node-link JSON string."""
+    return to_node_link_json(dag)
+
+
+def get_tool_specs() -> list[dict[str, Any]]:
+    """Return JSON tool specifications for LLM agent function calling."""
     return [
         {
             "name": "estimate_clock_offsets",
-            "description": "Estimate clock skew per service in seconds",
-            "parameters": {"type": "object", "properties": {}},
-        },
-        {
-            "name": "query_spans",
-            "description": "Query distributed trace spans with filters",
+            "description": "Estimate clock skew in seconds per service by analyzing cross-service parent->child span delays during healthy baseline.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "service": {"type": "string"},
-                    "status_code": {"type": "integer"},
-                    "trace_id": {"type": "string"},
+                    "db": {
+                        "type": "string",
+                        "description": "Path to SQLite database containing incident telemetry.",
+                    }
                 },
+                "required": ["db"],
+            },
+        },
+        {
+            "name": "query_spans",
+            "description": "Query distributed trace spans with clock correction, orphan detection, and causal ordering (DFS within trace, gateway root order across traces). Returns capped JSON summary.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "db": {"type": "string", "description": "Path to SQLite database."},
+                    "service": {
+                        "type": "string",
+                        "description": "Optional filter by service name (e.g. 'auth-service', 'gateway', 'db-pool').",
+                    },
+                    "status_code": {
+                        "type": "integer",
+                        "description": "Optional filter by HTTP status code (e.g. 504, 500, 200).",
+                    },
+                    "time_window": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "Optional [start_ms, end_ms] window interpreted in corrected time.",
+                    },
+                    "trace_id": {
+                        "type": "string",
+                        "description": "Optional filter for specific trace ID.",
+                    },
+                    "causal": {
+                        "type": "boolean",
+                        "description": "Whether to apply clock correction and causal DFS ordering (default True).",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of spans to return (default 50).",
+                    },
+                },
+                "required": ["db"],
+            },
+        },
+        {
+            "name": "get_metric_derivatives",
+            "description": "Compute numerical derivative inflection, peak slope, and baseline statistics for a single metric.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "db": {"type": "string", "description": "Path to SQLite database."},
+                    "metric_name": {
+                        "type": "string",
+                        "description": "Name of metric (e.g. 'db_pool.active_connections').",
+                    },
+                },
+                "required": ["db", "metric_name"],
             },
         },
         {
             "name": "rank_metric_onsets",
-            "description": "Rank metrics by anomalous onset time",
-            "parameters": {"type": "object", "properties": {}},
+            "description": "Rank all emitted metrics chronologically by anomalous onset timestamp using rolling median and 4-sigma derivative threshold.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "db": {"type": "string", "description": "Path to SQLite database."},
+                },
+                "required": ["db"],
+            },
         },
         {
             "name": "build_dependency_dag",
-            "description": "Build service dependency DAG",
-            "parameters": {"type": "object", "properties": {}},
+            "description": "Construct directed acyclic service dependency graph annotated with call counts, mean latencies, error propagation fractions, and metric onsets.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "db": {"type": "string", "description": "Path to SQLite database."},
+                },
+                "required": ["db"],
+            },
+        },
+        {
+            "name": "failure_frontier",
+            "description": "Identify the earliest failing service boundary along the dependency path using connection pool leak and metric signature analysis.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "dag": {
+                        "type": "object",
+                        "description": "NetworkX DiGraph or node-link representation of service topology (optional if db provided).",
+                    },
+                    "db": {
+                        "type": "string",
+                        "description": "Path to SQLite database (optional if dag provided).",
+                    },
+                },
+            },
         },
     ]
 
 
-TOOLS: dict[str, Callable] = {
-    "estimate_clock_offsets": estimate_clock_offsets,
-    "query_spans": query_spans,
-    "get_metric_derivatives": get_metric_derivatives,
-    "rank_metric_onsets": rank_metric_onsets,
-    "build_dependency_dag": build_dependency_dag,
-    "failure_frontier": failure_frontier,
+TOOLS: dict[str, Callable[..., Any]] = {
+    "estimate_clock_offsets": tool_estimate_clock_offsets,
+    "query_spans": tool_query_spans,
+    "get_metric_derivatives": tool_get_metric_derivatives,
+    "rank_metric_onsets": tool_rank_metric_onsets,
+    "build_dependency_dag": tool_build_dependency_dag,
+    "failure_frontier": tool_failure_frontier,
+    "to_node_link_json": tool_to_node_link_json,
 }
+
+__all__ = [
+    "estimate_clock_offsets",
+    "query_spans",
+    "get_metric_derivatives",
+    "rank_metric_onsets",
+    "build_dependency_dag",
+    "failure_frontier",
+    "to_node_link_json",
+    "get_tool_specs",
+    "TOOLS",
+]

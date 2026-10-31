@@ -9,6 +9,7 @@ from tools.api import (
     get_tool_specs,
     query_spans,
     rank_metric_onsets,
+    to_node_link_json,
 )
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "rank_metric_onsets",
     "build_dependency_dag",
     "failure_frontier",
+    "to_node_link_json",
     "get_tool_specs",
     "TOOLS",
 ]
