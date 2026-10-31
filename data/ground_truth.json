@@ -1,0 +1,23 @@
+{
+  "scenario": "pool_leak",
+  "seed": 42,
+  "total_records": 5153,
+  "total_traces": 800,
+  "raw_logs_before_drop": 1943,
+  "root_cause_service": "auth-service",
+  "root_cause_mechanism": "connection_leak_in_error_path",
+  "failing_resource": "db-pool",
+  "red_herring_metric": "frontend.cpu_pct",
+  "red_herring_onset_ms": 1700000245000,
+  "true_leak_onset_ms": 1700000120000,
+  "pool_exhausted_onset_ms": 1700000210000,
+  "first_504_onset_ms": 1700000215000,
+  "clock_skews_ms": {
+    "auth-service": 12000,
+    "gateway": 0,
+    "db-pool": 0,
+    "frontend": 0
+  },
+  "log_drop_rate": 0.15,
+  "span_drop_rate": 0.03
+}
