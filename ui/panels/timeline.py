@@ -207,7 +207,7 @@ def create_timeline_figure(
 
 def _select_evidence(evidence_id: str) -> None:
     st.session_state["selected_evidence_id"] = evidence_id
-    st.session_state["evidence_lookup_input"] = evidence_id
+    st.session_state["evidence_version"] = st.session_state.get("evidence_version", 0) + 1
 
 
 def render_timeline_panel(

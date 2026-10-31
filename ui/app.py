@@ -13,7 +13,26 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+import importlib  # noqa: E402
+
 import streamlit as st  # noqa: E402
+
+import ui.panels  # noqa: E402
+import ui.panels.agent_stream  # noqa: E402
+import ui.panels.counterfactual  # noqa: E402
+import ui.panels.dag_view  # noqa: E402
+import ui.panels.post_mortem  # noqa: E402
+import ui.panels.raw_telemetry  # noqa: E402
+import ui.panels.timeline  # noqa: E402
+
+# Hot-reload panels so module updates take effect immediately in running Streamlit processes
+importlib.reload(ui.panels.raw_telemetry)
+importlib.reload(ui.panels.post_mortem)
+importlib.reload(ui.panels.timeline)
+importlib.reload(ui.panels.dag_view)
+importlib.reload(ui.panels.counterfactual)
+importlib.reload(ui.panels.agent_stream)
+importlib.reload(ui.panels)
 
 from agent.runner import run_investigation  # noqa: E402
 from contracts.models import AgentEvent, IncidentReport  # noqa: E402
@@ -114,8 +133,8 @@ if "report" not in st.session_state:
 if "selected_evidence_id" not in st.session_state:
     st.session_state["selected_evidence_id"] = ""
 
-if "evidence_lookup_input" not in st.session_state:
-    st.session_state["evidence_lookup_input"] = ""
+if "evidence_version" not in st.session_state:
+    st.session_state["evidence_version"] = 0
 
 if "skew_corrected" not in st.session_state:
     # Default to False so Act 1 of demo immediately exposes the raw unaligned clock paradox
@@ -179,7 +198,7 @@ with st.sidebar:
         st.session_state["events"] = []
         st.session_state["report"] = load_golden_report()
         st.session_state["selected_evidence_id"] = ""
-        st.session_state["evidence_lookup_input"] = ""
+        st.session_state["evidence_version"] = 0
         st.session_state["skew_corrected"] = False
         st.rerun()
 

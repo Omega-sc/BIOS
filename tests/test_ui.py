@@ -229,10 +229,10 @@ def test_evidence_lookup_session_sync():
 
     # Simulate user clicking an evidence button in post-mortem:
     at.session_state["selected_evidence_id"] = "span-gw-3"
-    at.session_state["evidence_lookup_input"] = "span-gw-3"
+    at.session_state["evidence_version"] = 1
     at.run()
     assert not at.exception
-    assert at.text_input(key="evidence_lookup_input").value == "span-gw-3"
+    assert at.text_input(key="evidence_input_1").value == "span-gw-3"
 
 
 def test_evidence_button_click_in_post_mortem():
@@ -250,4 +250,7 @@ def test_evidence_button_click_in_post_mortem():
     evidence_buttons[0].click().run()
     assert not at.exception, f"Clicking evidence button caused exception: {at.exception}"
     assert at.session_state["selected_evidence_id"] != ""
-    assert at.session_state["evidence_lookup_input"] == at.session_state["selected_evidence_id"]
+    ver = at.session_state["evidence_version"]
+    assert (
+        at.text_input(key=f"evidence_input_{ver}").value == at.session_state["selected_evidence_id"]
+    )

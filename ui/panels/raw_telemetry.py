@@ -389,11 +389,6 @@ def render_raw_telemetry_panel(db_path: str | Path) -> None:
     st.markdown("#### 🔍 Evidence Row Direct SQLite Lookup")
     st.caption("Verify any cited evidence pointer directly against raw SQLite records.")
 
-    # Synchronize selected_evidence_id from button clicks into widget state before rendering
-    selected_ev = st.session_state.get("selected_evidence_id", "").strip()
-    if selected_ev and st.session_state.get("evidence_lookup_input") != selected_ev:
-        st.session_state["evidence_lookup_input"] = selected_ev
-
     sample_ids = [
         "",
         "db_pool.active_connections@1700000090000",
@@ -407,8 +402,8 @@ def render_raw_telemetry_panel(db_path: str | Path) -> None:
     def _on_sample_select() -> None:
         val = st.session_state.get("quick_evidence_sample", "")
         if val:
-            st.session_state["evidence_lookup_input"] = val
             st.session_state["selected_evidence_id"] = val
+            st.session_state["evidence_version"] = st.session_state.get("evidence_version", 0) + 1
 
     col_input, col_sample = st.columns([1.5, 1])
     with col_sample:
@@ -419,11 +414,15 @@ def render_raw_telemetry_panel(db_path: str | Path) -> None:
             on_change=_on_sample_select,
         )
 
+    current_val = st.session_state.get("selected_evidence_id", "")
+    current_ver = st.session_state.get("evidence_version", 0)
+
     with col_input:
         evidence_id_input = st.text_input(
             "Evidence ID (span_id, log_id, or metric@timestamp)",
+            value=current_val,
             placeholder="e.g. span-gw-3 or log-auth-5",
-            key="evidence_lookup_input",
+            key=f"evidence_input_{current_ver}",
         )
 
     lookup_id = evidence_id_input.strip()
