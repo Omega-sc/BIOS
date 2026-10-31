@@ -14,7 +14,7 @@ def generate_dag_dot(
     """Generate Graphviz DOT specification highlighting the localized failure frontier.
 
     Annotates edges with call counts and mean latencies, and highlights the failure frontier
-    boundary and root cause node.
+    boundary and root cause node using the Jungle Green and Off-White palette.
     """
     ff = (failure_frontier or "auth-service -> db-pool").strip()
 
@@ -46,28 +46,28 @@ def generate_dag_dot(
     is_node_gw = ff == "gateway"
     is_node_db = ff == "db-pool"
 
-    # Node styling
-    fe_color = "#dc2626" if is_fe_gw else "#94a3b8"
-    fe_fill = "#fee2e2" if is_fe_gw else "#f8fafc"
+    # Node styling in Jungle Green & Off-White
+    fe_color = "#1B4332" if is_fe_gw else "#74C69D"
+    fe_fill = "#D8F3DC" if is_fe_gw else "#FAF9F6"
     fe_pen = "3.5" if is_fe_gw else "1.5"
     fe_role = "[Root Cause Origin]" if is_fe_gw else "[Client Tier]"
 
-    gw_color = "#dc2626" if (is_gw_auth or is_node_gw) else "#f59e0b"
-    gw_fill = "#fee2e2" if (is_gw_auth or is_node_gw) else "#fffbeb"
+    gw_color = "#1B4332" if (is_gw_auth or is_node_gw) else "#2D6A4F"
+    gw_fill = "#D8F3DC" if (is_gw_auth or is_node_gw) else "#F4F3EE"
     gw_pen = "3.5" if (is_gw_auth or is_node_gw) else "2.0"
     gw_role = "[Root Cause Service]" if (is_gw_auth or is_node_gw) else "[Entrypoint]"
 
     auth_color = (
-        "#dc2626" if is_auth_db else ("#94a3b8" if (is_gw_auth or is_node_gw) else "#dc2626")
+        "#1B4332" if is_auth_db else ("#52665A" if (is_gw_auth or is_node_gw) else "#1B4332")
     )
     auth_fill = (
-        "#fee2e2" if is_auth_db else ("#f8fafc" if (is_gw_auth or is_node_gw) else "#fee2e2")
+        "#D8F3DC" if is_auth_db else ("#FAF9F6" if (is_gw_auth or is_node_gw) else "#D8F3DC")
     )
     auth_pen = "3.5" if is_auth_db else "2.0"
     auth_role = "[Root Cause Service]" if is_auth_db else "[Internal Service]"
 
-    db_color = "#dc2626" if (is_auth_db or is_node_db) else "#ef4444"
-    db_fill = "#fef2f2" if (is_auth_db or is_node_db) else "#f8fafc"
+    db_color = "#1B4332" if (is_auth_db or is_node_db) else "#52665A"
+    db_fill = "#EBF3EE" if (is_auth_db or is_node_db) else "#FAF9F6"
     db_pen = "2.5" if (is_auth_db or is_node_db) else "1.5"
 
     c_fe_gw = edge_stats[("frontend", "gateway")]
@@ -78,8 +78,8 @@ def generate_dag_dot(
         "digraph ServiceTopology {",
         "  rankdir=LR;",
         '  bgcolor="transparent";',
-        '  node [fontname="Helvetica,Arial,sans-serif", fontsize=11, shape=box, style="rounded,filled", margin="0.2,0.15"];',
-        '  edge [fontname="Helvetica,Arial,sans-serif", fontsize=10, color="#64748b", fontcolor="#334155"];',
+        '  node [fontname="Helvetica,Arial,sans-serif", fontsize=11, fontcolor="#1B4332", shape=box, style="rounded,filled", margin="0.2,0.15"];',
+        '  edge [fontname="Helvetica,Arial,sans-serif", fontsize=10, color="#52665A", fontcolor="#2C3E35"];',
         "",
         "  // Nodes",
         f'  frontend [label="frontend\\n{fe_role}\\nCPU Spike (+125s)\\n(Red Herring)", fillcolor="{fe_fill}", color="{fe_color}", penwidth={fe_pen}];',
@@ -93,31 +93,31 @@ def generate_dag_dot(
     # Edge 1: frontend -> gateway
     if is_fe_gw:
         dot_lines.append(
-            f'  frontend -> gateway [label="🔥 FAILURE FRONTIER\\ncalls: {c_fe_gw["calls"]}, lat: {c_fe_gw["latency_ms"]:.1f}ms\\n(Client Retry Storm)", color="#dc2626", fontcolor="#b91c1c", penwidth=4.0];'
+            f'  frontend -> gateway [label="FAILURE FRONTIER\\ncalls: {c_fe_gw["calls"]}, lat: {c_fe_gw["latency_ms"]:.1f}ms\\n(Client Retry Storm)", color="#1B4332", fontcolor="#1B4332", penwidth=4.0];'
         )
     else:
         dot_lines.append(
-            f'  frontend -> gateway [label=" calls: {c_fe_gw["calls"]} \\n lat: {c_fe_gw["latency_ms"]:.1f}ms ", penwidth=1.5];'
+            f'  frontend -> gateway [label=" calls: {c_fe_gw["calls"]} \\n lat: {c_fe_gw["latency_ms"]:.1f}ms ", color="#52665A", penwidth=1.5];'
         )
 
     # Edge 2: gateway -> auth-service
     if is_gw_auth:
         dot_lines.append(
-            f'  gateway -> "auth-service" [label="🔥 FAILURE FRONTIER\\ncalls: {c_gw_auth["calls"]}, lat: {c_gw_auth["latency_ms"]:.1f}ms\\n(Timeout / Upstream Stall)", color="#dc2626", fontcolor="#b91c1c", penwidth=4.0];'
+            f'  gateway -> "auth-service" [label="FAILURE FRONTIER\\ncalls: {c_gw_auth["calls"]}, lat: {c_gw_auth["latency_ms"]:.1f}ms\\n(Timeout / Upstream Stall)", color="#1B4332", fontcolor="#1B4332", penwidth=4.0];'
         )
     else:
         dot_lines.append(
-            f'  gateway -> "auth-service" [label=" calls: {c_gw_auth["calls"]} \\n lat: {c_gw_auth["latency_ms"]:.1f}ms ", penwidth=2.0];'
+            f'  gateway -> "auth-service" [label=" calls: {c_gw_auth["calls"]} \\n lat: {c_gw_auth["latency_ms"]:.1f}ms ", color="#52665A", penwidth=2.0];'
         )
 
     # Edge 3: auth-service -> db-pool
     if is_auth_db or is_node_db or (not is_fe_gw and not is_gw_auth and not is_node_gw):
         dot_lines.append(
-            f'  "auth-service" -> "db-pool" [label="🔥 FAILURE FRONTIER\\ncalls: {c_auth_db["calls"]}, lat: {c_auth_db["latency_ms"]:.1f}ms\\n(Pool Leak: active=20, QIF=flat)", color="#dc2626", fontcolor="#b91c1c", penwidth=4.0];'
+            f'  "auth-service" -> "db-pool" [label="FAILURE FRONTIER\\ncalls: {c_auth_db["calls"]}, lat: {c_auth_db["latency_ms"]:.1f}ms\\n(Pool Leak: active=20, QIF=flat)", color="#1B4332", fontcolor="#1B4332", penwidth=4.0];'
         )
     else:
         dot_lines.append(
-            f'  "auth-service" -> "db-pool" [label=" calls: {c_auth_db["calls"]} \\n lat: {c_auth_db["latency_ms"]:.1f}ms ", penwidth=2.0];'
+            f'  "auth-service" -> "db-pool" [label=" calls: {c_auth_db["calls"]} \\n lat: {c_auth_db["latency_ms"]:.1f}ms ", color="#52665A", penwidth=2.0];'
         )
 
     dot_lines.append("}")
@@ -129,7 +129,7 @@ def render_dag_panel(
     failure_frontier: str | None = "auth-service -> db-pool",
 ) -> None:
     """Render the service dependency DAG and failure frontier analysis."""
-    st.subheader("🗺️ Service Topology & Failure Frontier")
+    st.subheader("Service Topology & Failure Frontier")
 
     ff = (failure_frontier or "auth-service -> db-pool").strip()
 
@@ -143,9 +143,9 @@ def render_dag_panel(
 
     st.markdown(
         f"""
-        <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 12px 16px; border-radius: 4px; margin-bottom: 16px;">
-            <b style="color: #991b1b; font-size: 15px;">🔥 Localized Failure Frontier: <code>{ff}</code></b><br/>
-            <span style="color: #7f1d1d; font-size: 13px;">
+        <div style="background-color: #EBF3EE; border-left: 4px solid #1B4332; padding: 12px 16px; border-radius: 4px; margin-bottom: 16px;">
+            <b style="color: #1B4332; font-size: 15px;">Localized Failure Frontier: <code>{ff}</code></b><br/>
+            <span style="color: #2C3E35; font-size: 13px;">
                 {ff_explanation}
             </span>
         </div>
@@ -168,11 +168,11 @@ def render_dag_panel(
     with topo_col1:
         st.markdown(
             """
-            - **`auth-service`**: 💥 **Root Cause Origin**
+            - **`auth-service`**: **Root Cause Origin**
               - Unhandled exceptions skip `release()`.
               - Clock skew: `+12.0s` uncorrected wall-clock offset.
               - Onset timestamp: `t = +90.0s` (corrected).
-            - **`db-pool`**: ⛓️ **Resource Chokepoint**
+            - **`db-pool`**: **Resource Chokepoint**
               - Fixed capacity `POOL_MAX = 20`.
               - Queries in flight: Flat (`z = 2.09`, no database stall).
             """
@@ -181,10 +181,10 @@ def render_dag_panel(
     with topo_col2:
         st.markdown(
             """
-            - **`gateway`**: ⚠️ **User-Facing Symptom**
+            - **`gateway`**: **User-Facing Symptom**
               - Upstream timeout threshold: `3000ms`.
               - Spikes to 65% HTTP 504 errors at `t = +95.0s`.
-            - **`frontend`**: 🟡 **Red Herring / Amplifier**
+            - **`frontend`**: **Red Herring / Amplifier**
               - CPU utilization spikes to 88.5% at `t = +125.0s`.
               - Lagged gateway errors by **30 seconds** due to client retries.
             """

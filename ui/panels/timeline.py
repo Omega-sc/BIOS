@@ -33,7 +33,7 @@ def create_timeline_figure(
             x=0.5,
             y=0.5,
             showarrow=False,
-            font=dict(size=14, color="#64748b"),
+            font=dict(size=14, color="#52665A"),
         )
         return fig
 
@@ -56,10 +56,10 @@ def create_timeline_figure(
     }
 
     colors = {
-        "db-pool": "#ef4444",
-        "auth-service": "#f97316",
-        "gateway": "#eab308",
-        "frontend": "#3b82f6",
+        "db-pool": "#1B4332",
+        "auth-service": "#2D6A4F",
+        "gateway": "#40916C",
+        "frontend": "#74C69D",
     }
 
     fig = go.Figure()
@@ -77,7 +77,6 @@ def create_timeline_figure(
 
         # Calculate displayed timestamp
         if not skew_corrected and svc == "auth-service":
-            # Add +12s skew back to auth-service
             display_t_ms = ev.t_corrected_ms + auth_offset_ms
         else:
             display_t_ms = ev.t_corrected_ms
@@ -108,7 +107,7 @@ def create_timeline_figure(
             x=x_line,
             y=y_line,
             mode="lines",
-            line=dict(color="#cbd5e1", width=2, dash="dot"),
+            line=dict(color="#95D5B2", width=2, dash="dot"),
             hoverinfo="skip",
             showlegend=False,
         )
@@ -116,8 +115,8 @@ def create_timeline_figure(
 
     # Add markers by claim type
     for c_type, marker_symbol, label_prefix in [
-        ("verified_fact", "circle", "🟢 Verified Fact"),
-        ("inference", "diamond", "🟡 Inference"),
+        ("verified_fact", "circle", "Verified Fact"),
+        ("inference", "diamond", "Inference"),
     ]:
         type_events = [e for e in processed_events if e["claim_type"] == c_type]
         if not type_events:
@@ -125,7 +124,7 @@ def create_timeline_figure(
 
         x_pts = [e["rel_s"] for e in type_events]
         y_pts = [service_y_map.get(e["service"], 2) for e in type_events]
-        m_colors = [colors.get(e["service"], "#64748b") for e in type_events]
+        m_colors = [colors.get(e["service"], "#2D6A4F") for e in type_events]
         custom_text = [
             f"<b>Order #{e['order']}</b> (+{e['rel_s']}s)<br>"
             f"<b>Service:</b> {e['service']}<br>"
@@ -145,11 +144,11 @@ def create_timeline_figure(
                     symbol=marker_symbol,
                     size=16,
                     color=m_colors,
-                    line=dict(width=2, color="#0f172a"),
+                    line=dict(width=2, color="#1B4332"),
                 ),
                 text=[f"#{e['order']}" for e in type_events],
                 textposition="top center",
-                textfont=dict(size=11, color="#1e293b", family="sans-serif"),
+                textfont=dict(size=11, color="#1B4332", family="sans-serif"),
                 hovertext=custom_text,
                 hoverinfo="text",
             )
@@ -163,15 +162,15 @@ def create_timeline_figure(
                 + (
                     "True Causal Time (-12.0s Skew Corrected)"
                     if skew_corrected
-                    else "⚠️ Raw Wall-Clock (Uncorrected +12.0s Skew)"
+                    else "Raw Wall-Clock (Uncorrected +12.0s Skew)"
                 )
             ),
-            font=dict(size=14, color="#1e293b"),
+            font=dict(size=14, color="#1B4332"),
         ),
         xaxis=dict(
             title="Time Relative to Incident Start (seconds)",
-            gridcolor="#f1f5f9",
-            zerolinecolor="#94a3b8",
+            gridcolor="#D8E2DC",
+            zerolinecolor="#95D5B2",
             ticksuffix="s",
             showgrid=True,
         ),
@@ -180,25 +179,26 @@ def create_timeline_figure(
             tickmode="array",
             tickvals=[1, 2, 3, 4],
             ticktext=["db-pool", "auth-service", "gateway", "frontend"],
-            gridcolor="#f1f5f9",
+            gridcolor="#D8E2DC",
             range=[0.5, 4.5],
         ),
         height=380,
         margin=dict(l=80, r=30, t=50, b=50),
-        plot_bgcolor="#ffffff",
-        paper_bgcolor="#ffffff",
+        plot_bgcolor="#FAF9F6",
+        paper_bgcolor="#FAF9F6",
         legend=dict(
             orientation="h",
             yanchor="bottom",
             y=1.02,
             xanchor="right",
             x=1,
-            font=dict(size=11),
+            font=dict(size=11, color="#1B4332"),
         ),
         hoverlabel=dict(
-            bgcolor="#ffffff",
+            bgcolor="#FAF9F6",
             font_size=12,
             font_family="sans-serif",
+            font_color="#1B4332",
         ),
     )
 
@@ -215,12 +215,12 @@ def render_timeline_panel(
     clock_offsets: dict[str, float] | None = None,
 ) -> None:
     """Render reconstructed timeline panel with skew correction toggle."""
-    st.subheader("⏱️ Reconstructed Timeline & Causality Analysis")
+    st.subheader("Reconstructed Timeline & Causality Analysis")
 
     t_col1, t_col2 = st.columns([1.2, 1])
     with t_col1:
         skew_corrected = st.toggle(
-            "⏱️ Apply Skew Correction (-12.0s on auth-service)",
+            "Apply Skew Correction (-12.0s on auth-service)",
             value=st.session_state.get("skew_corrected", True),
             key="skew_toggle_widget",
         )
@@ -233,13 +233,13 @@ def render_timeline_panel(
             f"Estimated Skew: `auth-service`: +{offset_val:.1f}s | `gateway`: 0.0s | `db-pool`: 0.0s"
         )
 
-    # Causal reversal banner
+    # Causal reversal banner in two-colour scheme
     if not skew_corrected:
         st.markdown(
             """
-            <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; font-size: 13.5px; color: #991b1b;">
-                ❌ <b>Apparent Causal Paradox (Uncorrected Wall-Clock)</b>: Notice that Gateway HTTP 504 timeouts appear at
-                <code>+95.0s</code>, which is <b>prior to</b> auth-service connection pool exhaustion appearing at <code>+102.0s - +112.0s</code>!
+            <div style="background-color: #F4F3EE; border-left: 4px solid #1B4332; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; font-size: 13.5px; color: #1B4332;">
+                <b>Apparent Causal Paradox (Uncorrected Wall-Clock)</b>: Notice that Gateway HTTP 504 timeouts appear at
+                <code>+95.0s</code>, which is <b>prior to</b> auth-service connection pool exhaustion appearing at <code>+102.0s - +112.0s</code>.
                 This apparent paradox misleads responders into suspecting gateway timeouts rather than the downstream pool leak.
             </div>
             """,
@@ -248,8 +248,8 @@ def render_timeline_panel(
     else:
         st.markdown(
             """
-            <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; font-size: 13.5px; color: #166534;">
-                ✅ <b>True Causality Restored (Skew Corrected)</b>: By shifting <code>auth-service</code> timestamps forward by -12.0s,
+            <div style="background-color: #D8F3DC; border-left: 4px solid #2D6A4F; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; font-size: 13.5px; color: #1B4332;">
+                <b>True Causality Restored (Skew Corrected)</b>: By shifting <code>auth-service</code> timestamps forward by -12.0s,
                 db-pool saturation occurs at <code>+90.0s</code>, strictly <b>preceding</b> gateway 504 errors at <code>+95.0s</code>.
                 Frontend CPU spike follows at <code>+125.0s</code> (+30s lag), proving client retries are an amplifier rather than root cause.
             </div>
@@ -272,7 +272,7 @@ def render_timeline_panel(
         else:
             ev = item
 
-        badge = "🟢 Verified Fact" if ev.claim_type == "verified_fact" else "🟡 Inference"
+        badge = "Verified Fact" if ev.claim_type == "verified_fact" else "Inference"
         rel_s = round((ev.t_corrected_ms - 1700000000000) / 1000.0, 1)
 
         with st.expander(f"Order #{ev.order} (+{rel_s}s / {ev.service}): {ev.description[:60]}..."):
@@ -285,7 +285,7 @@ def render_timeline_panel(
                     b_col, n_col = st.columns([1.2, 3])
                     with b_col:
                         st.button(
-                            f"🔍 {ptr.id}",
+                            f"Inspect: {ptr.id}",
                             key=f"btn_tl_panel_{ev.order}_{ptr.id}",
                             on_click=_select_evidence,
                             args=(ptr.id,),

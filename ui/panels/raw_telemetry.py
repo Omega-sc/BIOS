@@ -276,7 +276,7 @@ def fetch_evidence_row(db_path: str | Path, evidence_id: str) -> dict[str, Any] 
 
 
 def style_telemetry_dataframe(df: pd.DataFrame):
-    """Style raw telemetry records colored by level/status and unaligned clock skew."""
+    """Style raw telemetry records using the Jungle Green and Off-White palette."""
 
     def _row_style(row: pd.Series) -> list[str]:
         status_val = str(row.get("Status / Val", "")).upper()
@@ -291,11 +291,11 @@ def style_telemetry_dataframe(df: pd.DataFrame):
         is_skewed = svc == "auth-service"
 
         if is_err:
-            return ["background-color: #fee2e2; color: #991b1b; font-weight: 600;"] * len(row)
+            return ["background-color: #D8F3DC; color: #1B4332; font-weight: 600;"] * len(row)
         if is_warn:
-            return ["background-color: #fef3c7; color: #92400e;"] * len(row)
+            return ["background-color: #EBF3EE; color: #2D6A4F;"] * len(row)
         if is_skewed:
-            return ["background-color: #fff7ed; color: #c2410c;"] * len(row)
+            return ["background-color: #F4F3EE; color: #1B4332;"] * len(row)
         return [""] * len(row)
 
     return df.style.apply(_row_style, axis=1)
@@ -303,12 +303,12 @@ def style_telemetry_dataframe(df: pd.DataFrame):
 
 def render_raw_telemetry_panel(db_path: str | Path) -> None:
     """Render raw telemetry dataframe and direct evidence row lookup."""
-    st.subheader("📡 Raw Unaligned Telemetry")
+    st.subheader("Raw Unaligned Telemetry")
 
     st.markdown(
         """
-        <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; font-size: 13.5px; color: #92400e;">
-            ⚠️ <b>Unaligned Wall-Clock Timestamps</b>: Notice <code>auth-service</code> records arrive with a
+        <div style="background-color: #EBF3EE; border-left: 4px solid #2D6A4F; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; font-size: 13.5px; color: #1B4332;">
+            <b>Unaligned Wall-Clock Timestamps</b>: Notice <code>auth-service</code> records arrive with a
             <b>+12.0s clock skew</b> relative to <code>gateway</code> and <code>db-pool</code>. In uncorrected coordinates,
             gateway 504 errors appear <i>before</i> auth pool exhaustion, presenting a false causal paradox.
             Additionally, telemetry reflects ~15% random log drop.
@@ -374,11 +374,11 @@ def render_raw_telemetry_panel(db_path: str | Path) -> None:
         st.dataframe(
             styled_df,
             use_container_width=True,
-            height=320,
+            height=340,
             hide_index=True,
         )
         st.caption(
-            f"Showing {len(df)} sample raw records from `{Path(db_path).name}` (wall-clock time, colored by status/skew)."
+            f"Showing {len(df)} sample raw records from `{Path(db_path).name}` (wall-clock time, highlighted by status and service skew)."
         )
     else:
         st.info("No records matched the selected filters.")
@@ -386,7 +386,7 @@ def render_raw_telemetry_panel(db_path: str | Path) -> None:
     st.divider()
 
     # Evidence Row Direct SQLite Lookup
-    st.markdown("#### 🔍 Evidence Row Direct SQLite Lookup")
+    st.markdown("#### Evidence Row Direct SQLite Lookup")
     st.caption("Verify any cited evidence pointer directly against raw SQLite records.")
 
     sample_ids = [
@@ -429,7 +429,7 @@ def render_raw_telemetry_panel(db_path: str | Path) -> None:
     if lookup_id:
         result = fetch_evidence_row(db_path, lookup_id)
         if result:
-            st.success(f"✅ Found in SQLite table `{result.get('raw_sql_table')}`")
+            st.success(f"Found in SQLite table `{result.get('raw_sql_table')}`")
             st.json(result)
         else:
             st.warning(f"No database row found matching Evidence ID `{lookup_id}`.")
