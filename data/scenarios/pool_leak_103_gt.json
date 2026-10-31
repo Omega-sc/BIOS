@@ -1,0 +1,17 @@
+{
+  "scenario": "pool_leak",
+  "seed": 103,
+  "total_records": 2713,
+  "total_traces": 500,
+  "onset_ms": 1700000120000,
+  "clock_skews_ms": {
+    "auth-service": 12000,
+    "gateway": 0,
+    "db-pool": 0,
+    "frontend": 0
+  },
+  "root_cause_service": "auth-service",
+  "root_cause_mechanism": "connection_leak_in_error_path",
+  "failing_resource": "db-pool",
+  "red_herring_metric": "frontend.cpu_pct"
+}

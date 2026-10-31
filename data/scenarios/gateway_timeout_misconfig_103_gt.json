@@ -1,0 +1,17 @@
+{
+  "scenario": "gateway_timeout_misconfig",
+  "seed": 103,
+  "total_records": 2741,
+  "total_traces": 500,
+  "onset_ms": 1700000120000,
+  "clock_skews_ms": {
+    "auth-service": 12000,
+    "gateway": 0,
+    "db-pool": 0,
+    "frontend": 0
+  },
+  "root_cause_service": "gateway",
+  "root_cause_mechanism": "upstream_timeout_misconfigured_50ms",
+  "failing_resource": "gateway",
+  "red_herring_metric": "db_pool.active_connections"
+}

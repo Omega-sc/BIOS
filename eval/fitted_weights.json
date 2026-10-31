@@ -1,0 +1,24 @@
+{
+  "weights": {
+    "metric_pool_max": 3.0,
+    "onset_pool_before_gw": 2.5,
+    "log_leak": 5.0,
+    "onset_cpu_before_gw": 4.0,
+    "onset_gw_before_cpu": 3.0,
+    "metric_high_inflight": 3.5,
+    "log_slow_db": 5.0,
+    "log_frontend_storm": 5.0,
+    "metric_gw_isolated_failure": 6.0,
+    "log_gw_misconfig": 5.0
+  },
+  "train_metrics": {
+    "top1_accuracy": 1.0,
+    "brier_score": 0.122
+  },
+  "heldout_test_metrics": {
+    "top1_accuracy": 1.0,
+    "brier_score": 0.122
+  },
+  "train_samples_count": 12,
+  "test_samples_count": 8
+}
