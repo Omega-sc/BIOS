@@ -19,3 +19,7 @@ data/incident.db
 .DS_Store
 Thumbs.db
 .agents/
+.env
+*.env
+.env.*
+!.env.example
