@@ -91,7 +91,7 @@ def test_dag_dot_generation():
     assert "db-pool" in dot
     assert "frontend" in dot
     assert "FAILURE FRONTIER" in dot
-    assert "#dc2626" in dot
+    assert "#1B4332" in dot
     assert "calls: 112" in dot
     assert "lat: 21.0ms" in dot
 
@@ -169,14 +169,14 @@ def test_event_formatting():
     # Test all 5 event types
     ev_state = AgentEvent(type="state", node="telemetry_ingestion", payload={"status": "started"})
     s_info = format_event_summary(ev_state)
-    assert s_info["icon"] == "🔄"
+    assert s_info["icon"] == ""
     assert "telemetry_ingestion" in s_info["title"]
 
     ev_tool = AgentEvent(
         type="tool_call", node="telemetry_ingestion", payload={"tool": "query_spans", "args": {}}
     )
     t_info = format_event_summary(ev_tool)
-    assert t_info["icon"] == "🛠️"
+    assert t_info["icon"] == ""
     assert "query_spans" in t_info["title"]
 
     ev_res = AgentEvent(
@@ -185,7 +185,7 @@ def test_event_formatting():
         payload={"tool": "query_spans", "result": {"count": 10}},
     )
     r_info = format_event_summary(ev_res)
-    assert r_info["icon"] == "✅"
+    assert r_info["icon"] == ""
 
     ev_hyp = AgentEvent(
         type="hypothesis",
@@ -198,7 +198,7 @@ def test_event_formatting():
         },
     )
     h_info = format_event_summary(ev_hyp)
-    assert h_info["icon"] == "💡"
+    assert h_info["icon"] == ""
     assert "H1" in h_info["title"]
     assert "root_cause" in h_info["summary"]
 
@@ -208,7 +208,7 @@ def test_event_formatting():
         payload={"schema_version": "1.0", "timeline_events": [], "hypotheses_evaluated": []},
     )
     rep_info = format_event_summary(ev_rep)
-    assert rep_info["icon"] == "🎉"
+    assert rep_info["icon"] == ""
 
 
 def test_streamlit_app_smoke():
@@ -242,8 +242,8 @@ def test_evidence_button_click_in_post_mortem():
     at.run()
     assert not at.exception
 
-    # Find evidence buttons (buttons starting with 🔍)
-    evidence_buttons = [b for b in at.button if "🔍" in b.label]
+    # Find evidence buttons (buttons starting with Inspect:)
+    evidence_buttons = [b for b in at.button if b.label.startswith("Inspect:")]
     assert len(evidence_buttons) > 0, "Expected evidence buttons in rendered report"
 
     # Click the first evidence button to verify on_click callback execution

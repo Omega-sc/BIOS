@@ -18,7 +18,7 @@ def render_post_mortem_panel(
     report: IncidentReport | dict[str, Any] | None,
 ) -> None:
     """Render structured post-mortem incident report with verified facts vs inferences."""
-    st.subheader("📋 Structured Post-Mortem Incident Report")
+    st.subheader("Structured Post-Mortem Report")
 
     if report is None:
         st.info(
@@ -47,31 +47,31 @@ def render_post_mortem_panel(
     st.markdown("---")
 
     # Section 1: Evaluated Hypotheses
-    st.markdown("#### 💡 Evaluated Hypotheses & Likelihood Confidence")
+    st.markdown("#### Evaluated Hypotheses & Likelihood Confidence")
     st.caption(
         "Bayesian posterior confidence computed via calibrated likelihood ratios. Terminology: *evidence-based score*."
     )
 
     for h in rep.hypotheses_evaluated:
         if h.verdict == "root_cause":
-            badge_html = "<span style='background-color:#dc2626;color:white;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;'>🔴 ROOT CAUSE</span>"
-            card_border = "#f87171"
-            card_bg = "#fef2f2"
+            badge_html = "<span style='background-color:#1B4332;color:#FAF9F6;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:0.04em;'>ROOT CAUSE</span>"
+            card_border = "#1B4332"
+            card_bg = "#EBF3EE"
         elif h.verdict == "contributing_factor":
-            badge_html = "<span style='background-color:#d97706;color:white;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;'>🟡 CONTRIBUTING FACTOR</span>"
-            card_border = "#fbbf24"
-            card_bg = "#fffbeb"
+            badge_html = "<span style='background-color:#2D6A4F;color:#FAF9F6;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:0.04em;'>CONTRIBUTING FACTOR</span>"
+            card_border = "#2D6A4F"
+            card_bg = "#F4F3EE"
         else:
-            badge_html = "<span style='background-color:#64748b;color:white;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;'>⚪ REJECTED</span>"
-            card_border = "#cbd5e1"
-            card_bg = "#f8fafc"
+            badge_html = "<span style='background-color:#52665A;color:#FAF9F6;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:0.04em;'>REJECTED</span>"
+            card_border = "#C8D5BB"
+            card_bg = "#FAF9F6"
 
         with st.container():
             st.markdown(
                 f"""
-                <div style="background-color:{card_bg}; border: 1.5px solid {card_border}; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="font-size: 15px; font-weight: 700; color: #0f172a;">[{h.id}] {h.statement}</span>
+                <div style="background-color:{card_bg}; border: 1.5px solid {card_border}; border-left: 5px solid {card_border}; border-radius: 6px; padding: 14px 16px; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-size: 15px; font-weight: 700; color: #1B4332;">[{h.id}] {h.statement}</span>
                         {badge_html}
                     </div>
                 </div>
@@ -93,12 +93,12 @@ def render_post_mortem_panel(
                 if h.supporting:
                     for ptr in h.supporting:
                         st.button(
-                            f"🔍 {ptr.id}",
+                            f"Inspect: {ptr.id}",
                             key=f"btn_supp_{h.id}_{ptr.id}",
                             on_click=_select_evidence,
                             args=(ptr.id,),
                         )
-                        st.caption(f"↳ *{ptr.note}*")
+                        st.caption(f"Note: *{ptr.note}*")
                 else:
                     st.caption("None cited.")
 
@@ -107,12 +107,12 @@ def render_post_mortem_panel(
                 if h.refuting:
                     for ptr in h.refuting:
                         st.button(
-                            f"🔍 {ptr.id}",
+                            f"Inspect: {ptr.id}",
                             key=f"btn_ref_{h.id}_{ptr.id}",
                             on_click=_select_evidence,
                             args=(ptr.id,),
                         )
-                        st.caption(f"↳ *{ptr.note}*")
+                        st.caption(f"Note: *{ptr.note}*")
                 else:
                     st.caption("None cited.")
 
@@ -121,9 +121,9 @@ def render_post_mortem_panel(
     st.markdown("---")
 
     # Section 2: Reconstructed Timeline
-    st.markdown("#### ⏳ Reconstructed Timeline Events")
+    st.markdown("#### Reconstructed Timeline Events")
     for ev in rep.timeline_events:
-        badge = "🟢 Verified Fact" if ev.claim_type == "verified_fact" else "🟡 Inference"
+        badge = "Verified Fact" if ev.claim_type == "verified_fact" else "Inference"
         rel_s = round((ev.t_corrected_ms - 1700000000000) / 1000.0, 1)
 
         with st.expander(f"Order #{ev.order} (+{rel_s}s / {ev.service}): {ev.description}"):
@@ -136,7 +136,7 @@ def render_post_mortem_panel(
                     b_col, n_col = st.columns([1, 3])
                     with b_col:
                         st.button(
-                            f"🔍 {ptr.id}",
+                            f"Inspect: {ptr.id}",
                             key=f"btn_tl_{ev.order}_{ptr.id}",
                             on_click=_select_evidence,
                             args=(ptr.id,),
@@ -147,12 +147,12 @@ def render_post_mortem_panel(
     st.markdown("---")
 
     # Section 3: Actionable Remediations
-    st.markdown("#### 🛡️ Actionable Remediation Plan")
+    st.markdown("#### Actionable Remediation Plan")
     for idx, rem in enumerate(rep.remediation, start=1):
         st.markdown(
             f"""
-            <div style="background-color: #f0fdf4; border-left: 4px solid #16a34a; padding: 10px 14px; border-radius: 4px; margin-bottom: 8px;">
-                <b style="color: #15803d;">Action Item #{idx}:</b> <span style="color: #166534;">{rem}</span>
+            <div style="background-color: #EBF3EE; border-left: 4px solid #2D6A4F; padding: 10px 14px; border-radius: 4px; margin-bottom: 8px;">
+                <b style="color: #1B4332;">Action Item #{idx}:</b> <span style="color: #1B4332;">{rem}</span>
             </div>
             """,
             unsafe_allow_html=True,

@@ -19,10 +19,10 @@ def format_event_summary(ev: AgentEvent) -> dict[str, Any]:
     if ev_type == "state":
         status = payload.get("status", "in_progress")
         return {
-            "icon": "🔄",
+            "icon": "",
             "title": f"Node Transition: {node}",
             "badge": "State Transition",
-            "badge_color": "#3b82f6",
+            "badge_color": "#2D6A4F",
             "summary": f"Pipeline entered `{node}` (status: {status}).",
             "details": payload,
         }
@@ -31,10 +31,10 @@ def format_event_summary(ev: AgentEvent) -> dict[str, Any]:
         tool = payload.get("tool", "unknown_tool")
         args = payload.get("args", {})
         return {
-            "icon": "🛠️",
+            "icon": "",
             "title": f"Tool Call: {tool}()",
             "badge": "Tool Invocation",
-            "badge_color": "#8b5cf6",
+            "badge_color": "#40916C",
             "summary": f"Executing tool `{tool}` with parameters: {json.dumps(args, default=str)}",
             "details": args,
         }
@@ -52,10 +52,10 @@ def format_event_summary(ev: AgentEvent) -> dict[str, Any]:
             res_summary = str(res)[:80]
 
         return {
-            "icon": "✅",
+            "icon": "",
             "title": f"Tool Result: {tool}",
             "badge": "Tool Output",
-            "badge_color": "#10b981",
+            "badge_color": "#2D6A4F",
             "summary": f"Tool `{tool}` completed: {res_summary}",
             "details": res,
         }
@@ -66,15 +66,15 @@ def format_event_summary(ev: AgentEvent) -> dict[str, Any]:
         verdict = payload.get("verdict", "unresolved")
         conf = payload.get("confidence", 0.0)
         verdict_color = (
-            "#dc2626"
+            "#1B4332"
             if verdict == "root_cause"
-            else "#d97706"
+            else "#2D6A4F"
             if verdict == "contributing_factor"
-            else "#64748b"
+            else "#52665A"
         )
 
         return {
-            "icon": "💡",
+            "icon": "",
             "title": f"Hypothesis {h_id}: {verdict.upper()}",
             "badge": f"Verdict: {verdict}",
             "badge_color": verdict_color,
@@ -87,19 +87,19 @@ def format_event_summary(ev: AgentEvent) -> dict[str, Any]:
         hyps = payload.get("hypotheses_evaluated", [])
         tl = payload.get("timeline_events", [])
         return {
-            "icon": "🎉",
+            "icon": "",
             "title": f"Synthesized Post-Mortem Report (v{version})",
             "badge": "Incident Report",
-            "badge_color": "#059669",
+            "badge_color": "#1B4332",
             "summary": f"Synthesis complete with {len(tl)} ordered timeline events and {len(hyps)} evaluated hypotheses.",
             "details": payload,
         }
 
     return {
-        "icon": "ℹ️",
+        "icon": "",
         "title": f"Event: {ev_type}",
         "badge": ev_type,
-        "badge_color": "#64748b",
+        "badge_color": "#52665A",
         "summary": str(payload)[:100],
         "details": payload,
     }
@@ -107,14 +107,14 @@ def format_event_summary(ev: AgentEvent) -> dict[str, Any]:
 
 def render_agent_stream_panel(events: list[AgentEvent], is_running: bool = False) -> None:
     """Render streaming agent events feed."""
-    st.subheader("⚡ Live Agent Investigation Stream")
+    st.subheader("Agent Investigation Stream")
 
     if is_running:
-        st.info("🔄 Autonomous investigation pipeline is currently running...")
+        st.info("Autonomous investigation pipeline is currently running...")
 
     if not events:
         st.info(
-            "No investigation has been executed yet. Click **'🚀 Investigate Incident'** in the sidebar to run."
+            "No investigation has been executed yet. Click **Run Investigation** in the sidebar to begin."
         )
         return
 
@@ -131,17 +131,17 @@ def render_agent_stream_panel(events: list[AgentEvent], is_running: bool = False
     with m3:
         st.metric("Hypotheses Tested", hyps_evaluated)
     with m4:
-        st.metric("Report Status", "Completed 🎉" if has_report else "In Progress 🔄")
+        st.metric("Report Status", "Completed" if has_report else "In Progress")
 
     st.markdown("---")
 
-    # Render events in reverse chronological or standard order
+    # Render events in chronological order
     for idx, ev in enumerate(events):
         info = format_event_summary(ev)
-        badge_html = f"<span style='background-color:{info['badge_color']};color:white;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;'>{info['badge']}</span>"
+        badge_html = f"<span style='background-color:{info['badge_color']};color:#FAF9F6;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;'>{info['badge']}</span>"
 
         with st.expander(
-            f"{info['icon']} {info['title']} (#{idx + 1})",
+            f"{info['title']} (#{idx + 1})",
             expanded=(idx >= len(events) - 3 or ev.type in ("hypothesis", "report")),
         ):
             st.markdown(f"{badge_html} &nbsp; {info['summary']}", unsafe_allow_html=True)
