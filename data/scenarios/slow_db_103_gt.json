@@ -1,7 +1,7 @@
 {
   "scenario": "slow_db",
   "seed": 103,
-  "total_records": 2717,
+  "total_records": 2720,
   "total_traces": 500,
   "onset_ms": 1700000120000,
   "clock_skews_ms": {

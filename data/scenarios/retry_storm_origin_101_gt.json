@@ -1,7 +1,7 @@
 {
   "scenario": "retry_storm_origin",
   "seed": 101,
-  "total_records": 2745,
+  "total_records": 2752,
   "total_traces": 500,
   "onset_ms": 1700000120000,
   "clock_skews_ms": {

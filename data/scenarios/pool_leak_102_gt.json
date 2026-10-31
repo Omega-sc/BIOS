@@ -1,7 +1,7 @@
 {
   "scenario": "pool_leak",
   "seed": 102,
-  "total_records": 2707,
+  "total_records": 2711,
   "total_traces": 500,
   "onset_ms": 1700000120000,
   "clock_skews_ms": {

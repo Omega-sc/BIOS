@@ -39,10 +39,12 @@ def run_evaluation() -> dict[str, Any]:
     primary_gt = ROOT_DIR / "data" / "ground_truth.json"
     if primary_jsonl.exists() and primary_gt.exists():
         tmp_db = ROOT_DIR / "data" / "eval_primary_tmp.db"
-        load_telemetry(primary_jsonl, tmp_db)
-        feat = extract_features_from_db(tmp_db)
-        if tmp_db.exists():
-            tmp_db.unlink()
+        try:
+            load_telemetry(primary_jsonl, tmp_db)
+            feat = extract_features_from_db(tmp_db)
+        finally:
+            if tmp_db.exists():
+                tmp_db.unlink()
 
         with open(primary_gt, "r", encoding="utf-8") as f:
             gt = json.load(f)
@@ -83,10 +85,12 @@ def run_evaluation() -> dict[str, Any]:
                 continue
 
             tmp_db = ROOT_DIR / "data" / f"eval_tmp_{sc}_{seed}.db"
-            load_telemetry(jsonl_file, tmp_db)
-            feat = extract_features_from_db(tmp_db)
-            if tmp_db.exists():
-                tmp_db.unlink()
+            try:
+                load_telemetry(jsonl_file, tmp_db)
+                feat = extract_features_from_db(tmp_db)
+            finally:
+                if tmp_db.exists():
+                    tmp_db.unlink()
 
             with open(gt_file, "r", encoding="utf-8") as f:
                 gt = json.load(f)
@@ -181,7 +185,7 @@ The reliability table compares model-assigned evidence confidence against observ
         )
 
     REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(REPORT_FILE, "w", encoding="utf-8") as f:
+    with open(REPORT_FILE, "w", encoding="utf-8", newline="\n") as f:
         f.write(report_content)
 
     return {

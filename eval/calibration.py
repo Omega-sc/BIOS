@@ -25,80 +25,83 @@ WEIGHTS_FILE = ROOT_DIR / "eval" / "fitted_weights.json"
 def extract_features_from_db(db_path: Path) -> dict[str, Any]:
     """Extract telemetry features from incident SQLite DB without reading ground truth."""
     conn = sqlite3.connect(str(db_path))
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    # 1. Metric onsets and peaks
-    features = {}
-    for metric in [
-        "db_pool.active_connections",
-        "db_pool.queries_in_flight",
-        "gateway.error_rate_5xx",
-        "frontend.cpu_pct",
-        "auth.latency_p99",
-    ]:
+        # 1. Metric onsets and peaks
+        features = {}
+        for metric in [
+            "db_pool.active_connections",
+            "db_pool.queries_in_flight",
+            "gateway.error_rate_5xx",
+            "frontend.cpu_pct",
+            "auth.latency_p99",
+        ]:
+            cur.execute(
+                "SELECT ts_ms, value FROM metrics WHERE metric = ? ORDER BY ts_ms ASC",
+                (metric,),
+            )
+            rows = cur.fetchall()
+            if not rows:
+                features[f"{metric}_onset"] = None
+                features[f"{metric}_peak"] = 0.0
+                continue
+
+            values = [r[1] for r in rows]
+            ts = [r[0] for r in rows]
+            features[f"{metric}_peak"] = float(max(values))
+
+            # Robust inflection detection with baseline std and minimum physical delta
+            baseline = float(np.mean(values[:10])) if len(values) >= 10 else values[0]
+            std = float(np.std(values[:10])) if len(values) >= 10 else 1.0
+
+            min_deltas = {
+                "frontend.cpu_pct": 15.0,
+                "db_pool.active_connections": 5.0,
+                "gateway.error_rate_5xx": 0.15,
+                "db_pool.queries_in_flight": 4.0,
+                "auth.latency_p99": 100.0,
+            }
+            delta = min_deltas.get(metric, 2.0)
+            thresh = max(baseline + 3.5 * max(0.2, std), baseline + delta)
+
+            onset = None
+            for t, v in zip(ts, values):
+                if v >= thresh:
+                    onset = t
+                    break
+            features[f"{metric}_onset"] = onset
+
+        # 2. Check for explicit error logs
         cur.execute(
-            "SELECT ts_ms, value FROM metrics WHERE metric = ? ORDER BY ts_ms ASC",
-            (metric,),
+            "SELECT COUNT(*) FROM logs WHERE service = 'auth-service' AND message LIKE '%leak%'"
         )
-        rows = cur.fetchall()
-        if not rows:
-            features[f"{metric}_onset"] = None
-            features[f"{metric}_peak"] = 0.0
-            continue
+        features["auth_leak_logs"] = cur.fetchone()[0]
 
-        values = [r[1] for r in rows]
-        ts = [r[0] for r in rows]
-        features[f"{metric}_peak"] = float(max(values))
+        cur.execute("SELECT COUNT(*) FROM logs WHERE service = 'db-pool' AND message LIKE '%slow%'")
+        features["db_slow_logs"] = cur.fetchone()[0]
 
-        # Robust inflection detection with baseline std and minimum physical delta
-        baseline = float(np.mean(values[:10])) if len(values) >= 10 else values[0]
-        std = float(np.std(values[:10])) if len(values) >= 10 else 1.0
+        cur.execute(
+            "SELECT COUNT(*) FROM logs WHERE service = 'frontend' AND message LIKE '%retry storm%'"
+        )
+        features["frontend_storm_logs"] = cur.fetchone()[0]
 
-        min_deltas = {
-            "frontend.cpu_pct": 15.0,
-            "db_pool.active_connections": 5.0,
-            "gateway.error_rate_5xx": 0.15,
-            "db_pool.queries_in_flight": 4.0,
-            "auth.latency_p99": 100.0,
-        }
-        delta = min_deltas.get(metric, 2.0)
-        thresh = max(baseline + 3.5 * max(0.2, std), baseline + delta)
+        cur.execute("SELECT COUNT(*) FROM logs WHERE service = 'gateway' AND message LIKE '%50ms%'")
+        features["gw_misconfig_logs"] = cur.fetchone()[0]
 
-        onset = None
-        for t, v in zip(ts, values):
-            if v >= thresh:
-                onset = t
-                break
-        features[f"{metric}_onset"] = onset
-
-    # 2. Check for explicit error logs
-    cur.execute(
-        "SELECT COUNT(*) FROM logs WHERE service = 'auth-service' AND message LIKE '%leak%'"
-    )
-    features["auth_leak_logs"] = cur.fetchone()[0]
-
-    cur.execute("SELECT COUNT(*) FROM logs WHERE service = 'db-pool' AND message LIKE '%slow%'")
-    features["db_slow_logs"] = cur.fetchone()[0]
-
-    cur.execute(
-        "SELECT COUNT(*) FROM logs WHERE service = 'frontend' AND message LIKE '%retry storm%'"
-    )
-    features["frontend_storm_logs"] = cur.fetchone()[0]
-
-    cur.execute("SELECT COUNT(*) FROM logs WHERE service = 'gateway' AND message LIKE '%50ms%'")
-    features["gw_misconfig_logs"] = cur.fetchone()[0]
-
-    # 3. Span failure counts
-    cur.execute("SELECT service, status_code, COUNT(*) FROM spans GROUP BY service, status_code")
-    span_stats = cur.fetchall()
-    features["gw_504_count"] = sum(
-        cnt for svc, sc, cnt in span_stats if svc == "gateway" and sc == 504
-    )
-    features["auth_500_count"] = sum(
-        cnt for svc, sc, cnt in span_stats if svc == "auth-service" and sc == 500
-    )
-
-    conn.close()
+        # 3. Span failure counts
+        cur.execute(
+            "SELECT service, status_code, COUNT(*) FROM spans GROUP BY service, status_code"
+        )
+        span_stats = cur.fetchall()
+        features["gw_504_count"] = sum(
+            cnt for svc, sc, cnt in span_stats if svc == "gateway" and sc == 504
+        )
+        features["auth_500_count"] = sum(
+            cnt for svc, sc, cnt in span_stats if svc == "auth-service" and sc == 500
+        )
+    finally:
+        conn.close()
     return features
 
 
@@ -106,64 +109,56 @@ def evaluate_hypothesis_scores(
     features: dict[str, Any], weights: dict[str, float]
 ) -> dict[str, float]:
     """Score candidate root cause services using likelihood-ratio evidence weights."""
-    scores = {}
-
-    # Candidate 1: auth-service (pool leak)
-    # Evidence: pool saturated before 504, auth leak logs, auth errors
-    odds_auth = 1.0
     active_peak = features.get("db_pool.active_connections_peak", 0.0)
     pool_onset = features.get("db_pool.active_connections_onset")
     gw_onset = features.get("gateway.error_rate_5xx_onset")
     cpu_onset = features.get("frontend.cpu_pct_onset")
 
+    # Candidate 1: auth-service (pool leak)
+    w_auth = 1.0
     if active_peak >= POOL_MAX:
-        odds_auth *= weights.get("metric_pool_max", 3.0)
+        w_auth *= weights.get("metric_pool_max", 3.0)
     if pool_onset and gw_onset and pool_onset < gw_onset:
-        odds_auth *= weights.get("onset_pool_before_gw", 2.5)
+        w_auth *= weights.get("onset_pool_before_gw", 2.5)
     if features.get("auth_leak_logs", 0) > 0:
-        odds_auth *= weights.get("log_leak", 5.0)
+        w_auth *= weights.get("log_leak", 5.0)
     if cpu_onset and gw_onset and cpu_onset < gw_onset:
-        # If CPU spiked before gateway, refutes auth as primary root cause
-        odds_auth /= weights.get("onset_cpu_before_gw", 4.0)
-
-    scores["auth-service"] = odds_auth / (1.0 + odds_auth)
+        w_auth /= weights.get("onset_cpu_before_gw", 4.0)
 
     # Candidate 2: db-pool (slow db)
-    # Evidence: queries_in_flight high, db slow logs
-    odds_db = 1.0
+    w_db = 1.0
     q_peak = features.get("db_pool.queries_in_flight_peak", 0.0)
     if q_peak > 8.0:
-        odds_db *= weights.get("metric_high_inflight", 3.5)
+        w_db *= weights.get("metric_high_inflight", 3.5)
     if features.get("db_slow_logs", 0) > 0:
-        odds_db *= weights.get("log_slow_db", 5.0)
-    scores["db-pool"] = odds_db / (1.0 + odds_db)
+        w_db *= weights.get("log_slow_db", 5.0)
 
     # Candidate 3: frontend (retry storm origin)
-    # Evidence: cpu onset BEFORE gateway 504 onset, frontend storm logs
-    odds_fe = 1.0
+    w_fe = 1.0
     if cpu_onset and gw_onset and cpu_onset <= gw_onset:
-        odds_fe *= weights.get("onset_cpu_before_gw", 6.0)
+        w_fe *= weights.get("onset_cpu_before_gw", 6.0)
     if features.get("frontend_storm_logs", 0) > 0:
-        odds_fe *= weights.get("log_frontend_storm", 5.0)
+        w_fe *= weights.get("log_frontend_storm", 5.0)
     if cpu_onset and gw_onset and cpu_onset > gw_onset:
-        odds_fe /= weights.get("onset_gw_before_cpu", 4.0)
-    scores["frontend"] = odds_fe / (1.0 + odds_fe)
+        w_fe /= weights.get("onset_gw_before_cpu", 4.0)
 
     # Candidate 4: gateway (timeout misconfig)
-    # Evidence: gw 504 high, but active connections and auth latency low
-    odds_gw = 1.0
+    w_gw = 1.0
     gw_504 = features.get("gw_504_count", 0)
     auth_lat = features.get("auth.latency_p99_peak", 0.0)
     if gw_504 > 10 and active_peak < 6.0 and auth_lat < 100.0:
-        odds_gw *= weights.get("metric_gw_isolated_failure", 6.0)
+        w_gw *= weights.get("metric_gw_isolated_failure", 6.0)
     if features.get("gw_misconfig_logs", 0) > 0:
-        odds_gw *= weights.get("log_gw_misconfig", 5.0)
-    scores["gateway"] = odds_gw / (1.0 + odds_gw)
+        w_gw *= weights.get("log_gw_misconfig", 5.0)
 
-    # Normalize softmax or bounded probabilities
-    total = sum(scores.values()) + 1e-6
-    normalized = {k: round(v / total, 4) for k, v in scores.items()}
-    return normalized
+    weights_dict = {
+        "auth-service": w_auth,
+        "db-pool": w_db,
+        "frontend": w_fe,
+        "gateway": w_gw,
+    }
+    total = sum(weights_dict.values()) + 1e-9
+    return {k: float(v / total) for k, v in weights_dict.items()}
 
 
 def fit_calibration_weights(
@@ -195,10 +190,12 @@ def fit_calibration_weights(
                     continue
 
                 db_temp = ROOT_DIR / "data" / f"eval_tmp_{seed}.db"
-                load_telemetry(jsonl_path, db_temp)
-                feat = extract_features_from_db(db_temp)
-                if db_temp.exists():
-                    db_temp.unlink()
+                try:
+                    load_telemetry(jsonl_path, db_temp)
+                    feat = extract_features_from_db(db_temp)
+                finally:
+                    if db_temp.exists():
+                        db_temp.unlink()
 
                 with open(gt_path, "r", encoding="utf-8") as f:
                     gt = json.load(f)
@@ -218,7 +215,10 @@ def fit_calibration_weights(
 
     weight_keys = list(initial_weights.keys())
 
-    # Objective function: log-loss on training samples
+    # Objective function: regularized log-loss on training samples
+    x0 = np.array([initial_weights[k] for k in weight_keys])
+    bounds = [(1.1, 10.0) for _ in weight_keys]
+
     def loss_func(params: np.ndarray) -> float:
         w = {k: max(1.1, float(v)) for k, v in zip(weight_keys, params)}
         loss = 0.0
@@ -226,10 +226,9 @@ def fit_calibration_weights(
             scores = evaluate_hypothesis_scores(s["features"], w)
             p_true = max(1e-4, scores.get(s["true_root_cause"], 0.01))
             loss -= np.log(p_true)
-        return float(loss)
+        reg = 0.02 * float(np.sum((np.log(params) - np.log(x0)) ** 2))
+        return float(loss + reg)
 
-    x0 = np.array([initial_weights[k] for k in weight_keys])
-    bounds = [(1.1, 15.0) for _ in weight_keys]
     res = minimize(loss_func, x0, method="L-BFGS-B", bounds=bounds)
 
     fitted_weights = {k: round(float(v), 3) for k, v in zip(weight_keys, res.x)}
@@ -250,7 +249,7 @@ def fit_calibration_weights(
                 brier += (p - y) ** 2
         acc = correct / max(1, len(samples))
         mean_brier = brier / (max(1, len(samples)) * 4.0)
-        return {"top1_accuracy": round(acc, 4), "brier_score": round(mean_brier, 4)}
+        return {"top1_accuracy": round(float(acc), 4), "brier_score": round(float(mean_brier), 4)}
 
     train_metrics = compute_metrics(train_samples, fitted_weights)
     test_metrics = compute_metrics(test_samples, fitted_weights)
@@ -264,7 +263,7 @@ def fit_calibration_weights(
     }
 
     WEIGHTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(WEIGHTS_FILE, "w", encoding="utf-8") as f:
+    with open(WEIGHTS_FILE, "w", encoding="utf-8", newline="\n") as f:
         json.dump(output, f, indent=2)
 
     return output

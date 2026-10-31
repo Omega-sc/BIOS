@@ -10,10 +10,15 @@ Generates 4 canonical scenarios across multiple seeds:
 import argparse
 import json
 import random
+import sys
 from pathlib import Path
 from typing import Any
 
-from contracts.constants import POOL_MAX, T0_MS
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from contracts.constants import POOL_MAX, T0_MS  # noqa: E402
 
 SCENARIOS = [
     "pool_leak",
@@ -177,7 +182,7 @@ def generate_scenario_telemetry(
 
     for i in range(trace_count):
         cur_t += scaling
-        if cur_t > window_s:
+        if cur_t > window_s + 1e-5:
             break
         t_req_ms = t0 + int(cur_t * 1000)
         trace_id = f"tr-{scenario_name[:2]}-{seed}-{i:04d}"
@@ -376,11 +381,13 @@ def generate_scenario_telemetry(
         },
     }
 
+    traces_generated = len(set(r["trace_id"] for r in records if r.get("trace_id")))
+
     ground_truth = {
         "scenario": scenario_name,
         "seed": seed,
         "total_records": len(records),
-        "total_traces": trace_count,
+        "total_traces": traces_generated,
         "onset_ms": t0 + int(onset_s * 1000),
         "clock_skews_ms": {"auth-service": auth_skew_ms, "gateway": 0, "db-pool": 0, "frontend": 0},
         **gt_map[scenario_name],

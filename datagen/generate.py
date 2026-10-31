@@ -7,10 +7,15 @@ with simulated clock skew (+12s on auth-service), 15% random log drop, and ~3% o
 import argparse
 import json
 import random
+import sys
 from pathlib import Path
 from typing import Any
 
-from contracts.constants import POOL_MAX, SKEW_MS, T0_MS
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from contracts.constants import POOL_MAX, SKEW_MS, T0_MS  # noqa: E402
 
 
 def generate_telemetry(
@@ -155,7 +160,7 @@ def generate_telemetry(
 
     for i in range(trace_count):
         cur_time += trace_intervals[i] * scaling
-        if cur_time > window_s:
+        if cur_time > window_s + 1e-5:
             break
 
         t_req_ms = T0_MS + int(cur_time * 1000)
@@ -361,12 +366,13 @@ def generate_telemetry(
         return 0
 
     records.sort(key=get_sort_key)
+    traces_generated = len(set(r["trace_id"] for r in records if r.get("trace_id")))
 
     ground_truth = {
         "scenario": scenario,
         "seed": seed,
         "total_records": len(records),
-        "total_traces": trace_count,
+        "total_traces": traces_generated,
         "raw_logs_before_drop": len(raw_logs),
         "root_cause_service": "auth-service",
         "root_cause_mechanism": "connection_leak_in_error_path",

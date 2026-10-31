@@ -9,12 +9,15 @@ from typing import Any
 
 def init_db(db_path: str | Path, schema_path: str | Path | None = None) -> sqlite3.Connection:
     """Initialize SQLite database with contracts/schema.sql."""
-    db_file = Path(db_path)
-    db_file.parent.mkdir(parents=True, exist_ok=True)
-    if db_file.exists():
-        db_file.unlink()
+    if str(db_path) == ":memory:":
+        conn = sqlite3.connect(":memory:")
+    else:
+        db_file = Path(db_path)
+        db_file.parent.mkdir(parents=True, exist_ok=True)
+        if db_file.exists():
+            db_file.unlink()
+        conn = sqlite3.connect(str(db_file))
 
-    conn = sqlite3.connect(str(db_file))
     if schema_path is None:
         schema_path = Path(__file__).resolve().parent.parent / "contracts" / "schema.sql"
 
@@ -82,23 +85,24 @@ def load_telemetry(jsonl_path: str | Path, db_path: str | Path) -> dict[str, int
                 )
                 counts["metrics"] += 1
 
-    cur.executemany(
-        "INSERT INTO spans (span_id, trace_id, parent_span_id, service, name, start_ms, end_ms, status_code, attrs) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        spans_batch,
-    )
-    cur.executemany(
-        "INSERT INTO logs (log_id, trace_id, span_id, service, ts_ms, level, message) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        logs_batch,
-    )
-    cur.executemany(
-        "INSERT INTO metrics (service, metric, ts_ms, value) VALUES (?, ?, ?, ?)",
-        metrics_batch,
-    )
-
-    conn.commit()
-    conn.close()
+    try:
+        cur.executemany(
+            "INSERT INTO spans (span_id, trace_id, parent_span_id, service, name, start_ms, end_ms, status_code, attrs) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            spans_batch,
+        )
+        cur.executemany(
+            "INSERT INTO logs (log_id, trace_id, span_id, service, ts_ms, level, message) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            logs_batch,
+        )
+        cur.executemany(
+            "INSERT INTO metrics (service, metric, ts_ms, value) VALUES (?, ?, ?, ?)",
+            metrics_batch,
+        )
+        conn.commit()
+    finally:
+        conn.close()
     return counts
 
 

@@ -53,3 +53,16 @@ def test_scenario_records_validity():
                 else:
                     raise ValueError(f"Unknown type {rtype}")
         assert line_count >= 1500
+
+
+def test_scenario_counts_match_ground_truth():
+    for sc in SCENARIOS:
+        for seed in DEFAULT_SEEDS:
+            gt_path = SCENARIOS_DIR / f"{sc}_{seed}_gt.json"
+            jsonl_path = SCENARIOS_DIR / f"{sc}_{seed}.jsonl"
+            with open(gt_path, "r", encoding="utf-8") as f:
+                gt = json.load(f)
+            records = [json.loads(line) for line in open(jsonl_path, "r", encoding="utf-8")]
+            traces = set(r["trace_id"] for r in records if r.get("trace_id"))
+            assert len(records) == gt["total_records"], f"Record count mismatch in {sc}_{seed}"
+            assert len(traces) == gt["total_traces"], f"Trace count mismatch in {sc}_{seed}"

@@ -1,7 +1,7 @@
 {
   "scenario": "gateway_timeout_misconfig",
   "seed": 101,
-  "total_records": 2738,
+  "total_records": 2740,
   "total_traces": 500,
   "onset_ms": 1700000120000,
   "clock_skews_ms": {

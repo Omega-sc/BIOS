@@ -71,6 +71,12 @@ def test_ground_truth_metadata():
     assert gt["pool_exhausted_onset_ms"] < gt["first_504_onset_ms"]
     assert gt["first_504_onset_ms"] < gt["red_herring_onset_ms"]
 
+    # Verify counts match telemetry file
+    records = [json.loads(line) for line in open(TELEMETRY_PATH, "r", encoding="utf-8")]
+    traces = set(r["trace_id"] for r in records if r.get("trace_id"))
+    assert len(records) == gt["total_records"]
+    assert len(traces) == gt["total_traces"]
+
 
 def test_database_ingestion():
     temp_db = ROOT_DIR / "data" / "test_verify.db"
