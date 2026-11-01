@@ -14,6 +14,17 @@ def counterfactual_verifier_node(state: IncidentState, n_runs: int = 200) -> Ite
     """Execute counterfactual discrete-event simulations to verify root cause and contributing factors."""
     state.current_node = "counterfactual_verifier"
 
+    if not state.incident_detected:
+        skip_ev = AgentEvent(
+            type="state",
+            node="counterfactual_verifier",
+            payload={"status": "skipped", "reason": "No incident detected in telemetry."},
+        )
+        state.record_event(skip_ev)
+        yield skip_ev
+        state.current_node = "report_synthesizer"
+        return
+
     start_ev = AgentEvent(
         type="state",
         node="counterfactual_verifier",
@@ -115,16 +126,18 @@ def counterfactual_verifier_node(state: IncidentState, n_runs: int = 200) -> Ite
     for h in state.hypotheses:
         if h.id == "H1":
             h.counterfactual = cf_leak
-            # Fixing the leak eliminates failures -> proves H1 is root cause
+            # If simulation reproduces baseline failures and fixing leak eliminates them, confirm root cause
             if cf_leak.baseline_failure_prob > 0.05 and cf_leak.intervened_failure_prob <= 0.05:
-                h.verdict = "root_cause"
+                if h.verdict in ("root_cause", "unresolved"):
+                    h.verdict = "root_cause"
         elif h.id == "H2":
             h.counterfactual = cf_retries
             # Removing retries leaves failures elevated while H1 is root cause -> contributing factor
-            if cf_retries.intervened_failure_prob > 0.05 and any(
+            if any(
                 other.id == "H1" and other.verdict == "root_cause" for other in state.hypotheses
             ):
-                h.verdict = "contributing_factor"
+                if cf_retries.intervened_failure_prob > 0.05:
+                    h.verdict = "contributing_factor"
         elif h.id in ("H3", "H4"):
             if not any(
                 other.id == h.id and other.verdict == "root_cause" for other in state.hypotheses

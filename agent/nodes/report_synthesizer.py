@@ -164,8 +164,19 @@ def synthesize_incident_report(state: IncidentState) -> IncidentReport:
                 h.counterfactual = state.counterfactuals["no_retries"]
 
     # Reconstruct timeline events from verified telemetry
-    timeline_events = synthesize_timeline_events(state)
-    state.timeline_events = timeline_events
+    if not state.incident_detected:
+        timeline_events = []
+        state.timeline_events = []
+        lim = "No incident detected: telemetry remains within healthy baseline bounds; no degradation observed."
+        if lim not in state.limitations:
+            state.limitations.append(lim)
+        remediation_actions = [
+            "No remediation required: telemetry indicates healthy operational baseline."
+        ]
+    else:
+        timeline_events = synthesize_timeline_events(state)
+        state.timeline_events = timeline_events
+        remediation_actions = REMEDIATION_RECOMMENDATIONS
 
     # Collect and deduplicate all evidence pointers across timeline and hypotheses
     seen_pointers: set[str] = set()
@@ -192,7 +203,7 @@ def synthesize_incident_report(state: IncidentState) -> IncidentReport:
         hypotheses_evaluated=state.hypotheses,
         evidence_pointers=all_pointers,
         estimated_clock_offsets_s=state.clock_offsets,
-        remediation=REMEDIATION_RECOMMENDATIONS,
+        remediation=remediation_actions,
         data_quality=state.data_quality,
         limitations=state.limitations,
         investigation_seconds=state.investigation_seconds,

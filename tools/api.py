@@ -10,10 +10,17 @@ from typing import Any
 
 import networkx as nx
 
+from tools.anomaly import detect_incident_anomalies
 from tools.dag import build_dependency_dag, failure_frontier, to_node_link_json
 from tools.metrics import get_metric_derivatives, rank_metric_onsets
 from tools.skew import estimate_clock_offsets
 from tools.spans import query_spans
+
+
+def tool_detect_incident_anomalies(db: str | Path | sqlite3.Connection) -> dict[str, Any]:
+    """Return JSON-serializable evaluation of incident detection gate using robust z-scores (MAD)."""
+    res = detect_incident_anomalies(db)
+    return res.to_dict()
 
 
 def tool_estimate_clock_offsets(db: str | Path | sqlite3.Connection) -> dict[str, float]:
@@ -190,10 +197,22 @@ def get_tool_specs() -> list[dict[str, Any]]:
                 },
             },
         },
+        {
+            "name": "detect_incident_anomalies",
+            "description": "Evaluate span-derived series and metrics against early baseline using robust z-scores (MAD) to detect incidents or confirm healthy telemetry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "db": {"type": "string", "description": "Path to SQLite database."},
+                },
+                "required": ["db"],
+            },
+        },
     ]
 
 
 TOOLS: dict[str, Callable[..., Any]] = {
+    "detect_incident_anomalies": tool_detect_incident_anomalies,
     "estimate_clock_offsets": tool_estimate_clock_offsets,
     "query_spans": tool_query_spans,
     "get_metric_derivatives": tool_get_metric_derivatives,
@@ -204,6 +223,7 @@ TOOLS: dict[str, Callable[..., Any]] = {
 }
 
 __all__ = [
+    "detect_incident_anomalies",
     "estimate_clock_offsets",
     "query_spans",
     "get_metric_derivatives",

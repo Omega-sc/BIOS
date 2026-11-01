@@ -88,6 +88,7 @@ class HypothesisEvaluated(BaseModel):
     supporting: list[EvidencePointer]
     refuting: list[EvidencePointer]
     counterfactual: CounterfactualResult | None = None
+    missing_evidence: list[str] = Field(default_factory=list)
 
 
 class IncidentReport(BaseModel):

@@ -6,7 +6,9 @@ import json
 import sqlite3
 from pathlib import Path
 
+from agent.config import HYPOTHESIS_CONFIG
 from contracts.models import EvidencePointer, HypothesisEvaluated
+from tools.anomaly import detect_incident_anomalies
 from tools.metrics import rank_metric_onsets
 from tools.skew import estimate_clock_offsets
 
@@ -64,6 +66,7 @@ def score_hypothesis(
 def evaluate_hypotheses_from_db(
     db: str | Path | sqlite3.Connection,
     weights: dict[str, float] | None = None,
+    incident_detected: bool | None = None,
 ) -> list[HypothesisEvaluated]:
     """Evaluate candidate hypotheses against telemetry SQLite database.
 
@@ -147,6 +150,63 @@ def evaluate_hypotheses_from_db(
         # Discover client service (service with no spans but present in metrics/logs)
         client_candidates = [s for s in all_services if s not in span_services]
         client_svc = client_candidates[0] if client_candidates else None
+
+        # Incident detection gate (P2): abstain if telemetry is within healthy baseline bounds
+        if incident_detected is None:
+            detection = detect_incident_anomalies(conn)
+            incident_detected = detection.incident_detected
+
+        if not incident_detected:
+            mid_name = mid_svc or "upstream service"
+            root_name = root_svc or "entrypoint service"
+            leaf_name = leaf_svc or "downstream database"
+            client_name = client_svc or "client frontend"
+            return [
+                HypothesisEvaluated(
+                    id="H1",
+                    statement=f"{mid_name} leaks resource connections on error path, exhausting pool and causing {root_name} timeout cascade.",
+                    confidence=0.10,
+                    verdict="unresolved",
+                    supporting=[],
+                    refuting=[],
+                    missing_evidence=[
+                        "Telemetry within healthy baseline bounds; no resource exhaustion detected."
+                    ],
+                ),
+                HypothesisEvaluated(
+                    id="H2",
+                    statement=f"{client_name} retry storm caused downstream server overload and {root_name} timeouts.",
+                    confidence=0.10,
+                    verdict="unresolved",
+                    supporting=[],
+                    refuting=[],
+                    missing_evidence=[
+                        "Telemetry within healthy baseline bounds; no request storm or CPU spike detected."
+                    ],
+                ),
+                HypothesisEvaluated(
+                    id="H3",
+                    statement=f"Slow queries on {leaf_name} saturated connection pool and caused timeout cascade.",
+                    confidence=0.10,
+                    verdict="unresolved",
+                    supporting=[],
+                    refuting=[],
+                    missing_evidence=[
+                        "Telemetry within healthy baseline bounds; no query latency elongation detected."
+                    ],
+                ),
+                HypothesisEvaluated(
+                    id="H4",
+                    statement=f"{root_name} timeout misconfiguration prematurely aborted healthy downstream requests.",
+                    confidence=0.10,
+                    verdict="unresolved",
+                    supporting=[],
+                    refuting=[],
+                    missing_evidence=[
+                        "Telemetry within healthy baseline bounds; no timeout errors observed."
+                    ],
+                ),
+            ]
 
         # 1. Estimate clock offsets and metric onsets with skew correction
         offsets = estimate_clock_offsets(conn)
@@ -476,24 +536,57 @@ def evaluate_hypotheses_from_db(
         h4_supporting.extend(gw_misconfig_pointers)
 
     weights_dict = {"H1": w_h1, "H2": w_h2, "H3": w_h3, "H4": w_h4}
-    total_w = sum(weights_dict.values()) + 1e-9
+    # Normalize with explicit 'none of the above' prior mass
+    total_w = sum(weights_dict.values()) + HYPOTHESIS_CONFIG.none_of_above_mass + 1e-9
     confidences = {
         k: max(0.01, min(0.99, round(float(v / total_w), 4))) for k, v in weights_dict.items()
     }
 
-    best_hyp_id = max(confidences, key=confidences.get)
+    sorted_hyps = sorted(confidences.items(), key=lambda kv: kv[1], reverse=True)
+    best_hyp_id, best_conf = sorted_hyps[0]
+    runner_up_id, runner_up_conf = sorted_hyps[1] if len(sorted_hyps) > 1 else ("", 0.0)
+    margin = best_conf - runner_up_conf
+    best_weight = weights_dict[best_hyp_id]
+    supporting_map = {
+        "H1": h1_supporting,
+        "H2": h2_supporting,
+        "H3": h3_supporting,
+        "H4": h4_supporting,
+    }
+    best_supporting = supporting_map[best_hyp_id]
 
-    v_h1 = "root_cause" if best_hyp_id == "H1" else "rejected"
+    has_evidence = best_weight >= HYPOTHESIS_CONFIG.min_evidence_score and len(best_supporting) > 0
+    has_margin = margin >= HYPOTHESIS_CONFIG.min_confidence_margin
+
+    missing_map: dict[str, list[str]] = {"H1": [], "H2": [], "H3": [], "H4": []}
+
+    if not has_evidence or not has_margin:
+        best_verdict = "unresolved"
+        confidences[best_hyp_id] = min(best_conf, HYPOTHESIS_CONFIG.max_unresolved_confidence)
+        if not has_evidence:
+            missing_map[best_hyp_id].append(
+                f"Insufficient corroborating evidence: score ({best_weight:.2f}) < threshold ({HYPOTHESIS_CONFIG.min_evidence_score}). Missing definitive metric onset or error traces."
+            )
+        if not has_margin:
+            missing_map[best_hyp_id].append(
+                f"Ambiguous hypothesis separation: margin ({margin:.2f}) over {runner_up_id} < threshold ({HYPOTHESIS_CONFIG.min_confidence_margin})."
+            )
+    else:
+        best_verdict = "root_cause"
+
+    v_h1 = best_verdict if best_hyp_id == "H1" else "rejected"
     if best_hyp_id == "H2":
-        v_h2 = "root_cause"
-    elif best_hyp_id == "H1" and (
-        fe_storm_pointers or (cpu_onset and gw_onset and cpu_onset >= gw_onset)
+        v_h2 = best_verdict
+    elif (
+        best_hyp_id == "H1"
+        and best_verdict == "root_cause"
+        and (fe_storm_pointers or (cpu_onset and gw_onset and cpu_onset >= gw_onset))
     ):
         v_h2 = "contributing_factor"
     else:
         v_h2 = "rejected"
-    v_h3 = "root_cause" if best_hyp_id == "H3" else "rejected"
-    v_h4 = "root_cause" if best_hyp_id == "H4" else "rejected"
+    v_h3 = best_verdict if best_hyp_id == "H3" else "rejected"
+    v_h4 = best_verdict if best_hyp_id == "H4" else "rejected"
 
     # Generate statements bound to discovered service names (never hardcoded scenario literals)
     mid_name = mid_svc or "upstream service"
@@ -508,6 +601,7 @@ def evaluate_hypotheses_from_db(
         verdict=v_h1,
         supporting=h1_supporting,
         refuting=h1_refuting,
+        missing_evidence=missing_map["H1"],
     )
 
     h2 = HypothesisEvaluated(
@@ -517,6 +611,7 @@ def evaluate_hypotheses_from_db(
         verdict=v_h2,
         supporting=h2_supporting,
         refuting=h2_refuting,
+        missing_evidence=missing_map["H2"],
     )
 
     h3 = HypothesisEvaluated(
@@ -526,6 +621,7 @@ def evaluate_hypotheses_from_db(
         verdict=v_h3,
         supporting=h3_supporting,
         refuting=h3_refuting,
+        missing_evidence=missing_map["H3"],
     )
 
     h4 = HypothesisEvaluated(
@@ -535,6 +631,7 @@ def evaluate_hypotheses_from_db(
         verdict=v_h4,
         supporting=h4_supporting,
         refuting=h4_refuting,
+        missing_evidence=missing_map["H4"],
     )
 
     return [h1, h2, h3, h4]

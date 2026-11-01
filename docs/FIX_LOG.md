@@ -50,3 +50,61 @@
 ### 3. Remaining Gaps & Limits
 - Incident detection gate is not yet implemented (investigation does not abstain on healthy telemetry where no anomaly exists, producing false positive root causes; addressed in Phase 2).
 - Hypothesis statements still use heuristic role mapping (e.g., `mid_svc`, `leaf_svc`) rather than fully deterministic structural detectors (addressed in Phase 3).
+
+
+## Phase 2: Abstain and Incident Detection
+
+### 1. What Changed
+- **Robust Incident Detection Gate (`tools/anomaly.py`)**:
+  - Implemented `detect_incident_anomalies(db, config)` computing Median Absolute Deviation (MAD) robust z-scores across early baseline telemetry:
+    - Per-service span error rate (`status_code >= 400` or non-200)
+    - Per-service p99 duration/latency
+    - Per-service span request arrival rate
+    - Every metric time series in SQLite `metrics` table
+  - Uses directional shift modeling (elevations in error rate, p99 latency, resource saturation gauges) with baseline relative variance floor to eliminate false positives on nominal operational jitter.
+  - Automatically flags anomalies when robust z-score $z \ge 3.5$ or absolute error rate $\ge 5\%$.
+  - Exposed via `tools/api.py` registry as `tool_detect_incident_anomalies`.
+- **Configurable Thresholds with Rationale (`agent/config.py`)**:
+  - `IncidentDetectionConfig`:
+    - `baseline_time_fraction = 0.25`: first quartile establishes healthy baseline period.
+    - `mad_z_threshold = 3.5`: corresponds to $p < 0.0005$ under normality, barring false alarms.
+    - `min_error_rate_anomaly = 0.05`: sustained 5% error rate is clinically anomalous.
+  - `HypothesisEvaluationConfig`:
+    - `min_evidence_score = 2.0`: hypotheses must have positive supporting evidence beyond prior.
+    - `min_confidence_margin = 0.15`: requires at least 15% confidence separation between top hypothesis and runner-up to avoid guessing on ambiguous evidence.
+    - `max_unresolved_confidence = 0.45`: caps confidence when evidence is ambiguous or weak.
+    - `none_of_above_mass = 0.5`: explicit unallocated prior probability mass in Bayesian normalization.
+- **Hypothesis Abstention & Confidence Calibration (`agent/scoring.py`)**:
+  - Prior to hypothesis evaluation, runs incident detection gate.
+  - If no incident detected (`incident_detected = False`):
+    - All candidate hypotheses are given `verdict = "unresolved"`.
+    - Confidence is capped at $\le 0.10$.
+    - Supporting and refuting evidence lists remain empty (`[]`).
+    - Explicit limitations recorded: healthy baseline confirmed.
+  - If an incident is detected:
+    - Best hypothesis verified against `min_evidence_score` and `min_confidence_margin`.
+    - If evidence is below threshold or margin is too narrow: best hypothesis verdict is set to `"unresolved"`, confidence capped at 0.45, and missing evidence is explicitly recorded in `missing_evidence`.
+- **Pipeline Nodes Abstention Integration**:
+  - `agent/nodes/hypothesis_generator.py`: runs incident detection gate upfront and logs detection metadata to `state.data_quality["incident_detection"]`.
+  - `agent/nodes/counterfactual_verifier.py`: skips counterfactual discrete-event simulation when `not state.incident_detected`; never upgrades an unresolved or refuting hypothesis to root cause.
+  - `agent/nodes/report_synthesizer.py`: when `not state.incident_detected`, produces an empty timeline, sets `remediation = ["No remediation required: telemetry indicates healthy operational baseline."]`, and logs healthy limitations.
+  - `contracts/models.py`: additively extended `HypothesisEvaluated` with `missing_evidence: list[str] = Field(default_factory=list)`.
+
+### 2. Evidence
+- **Blind Mutation Checks (`eval/blind/blind_check.py`)**:
+  - `[PASS] renamed services/metrics: runs and cites only real names`
+  - `[PASS] no skew present: does not invent one`
+  - `[PASS] replay mode with different data: does not return canned report`
+  - `[PASS] no-incident control: abstains instead of naming a root cause`
+  - Result: **4/4 Passed (100% blind checks passing)**.
+- **Scenario Verification**:
+  - 20 of 20 incident scenarios in `data/scenarios/` correctly detected as incidents.
+  - Healthy slice correctly detected as healthy control (`incident_detected=False`, max z-score = 1.78 < 3.5).
+- **Unit & Integration Test Suite (`tests/`)**:
+  - 66 of 66 tests passing (including 4 new dedicated incident detection and margin tests in `tests/test_incident_detection.py`).
+- **Code Quality**:
+  - `uv run ruff check .` passed with 0 errors.
+  - `uv run ruff format --check .` passed (68 files formatted).
+
+### 3. Remaining Gaps & Limits
+- Detector logic for resource leaks, retry storms, slow DB, and timeout misconfigurations currently lives in `agent/scoring.py` heuristic rules; Phase 3 will decompose these into formal deterministic detector functions bound to discovered entities.

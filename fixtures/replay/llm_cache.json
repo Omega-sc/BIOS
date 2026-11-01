@@ -820,5 +820,451 @@
         "input": {}
       }
     ]
+  },
+  "0f59d09c79bcbdcd3b7d23d24360151f5d452aa57e4dd5c06fb8eb0000b0932c": {
+    "role": "assistant",
+    "content": "Calling tool `estimate_clock_offsets` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_estimate_clock_offsets_1",
+        "name": "estimate_clock_offsets",
+        "input": {}
+      }
+    ]
+  },
+  "9063aaaacb537e6ea79f4e10a038a05b2356b6ab1c9d8ebc89e545bb02dadd0a": {
+    "role": "assistant",
+    "content": "Calling tool `rank_metric_onsets` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_rank_metric_onsets_3",
+        "name": "rank_metric_onsets",
+        "input": {}
+      }
+    ]
+  },
+  "29df351696f17ca8f454d1a7779d0e9f26869467f632b4e4408714abdd54ddf7": {
+    "role": "assistant",
+    "content": "Calling tool `get_metric_derivatives` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_get_metric_derivatives_5",
+        "name": "get_metric_derivatives",
+        "input": {
+          "metric_name": "db_pool.active_connections"
+        }
+      }
+    ]
+  },
+  "fe848007acf830ff2bfa4889967d76bb01b2e1817ef69193a2fc93f29b14b0c6": {
+    "role": "assistant",
+    "content": "Calling tool `query_spans` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_query_spans_7",
+        "name": "query_spans",
+        "input": {
+          "causal": true,
+          "limit": 50
+        }
+      }
+    ]
+  },
+  "829a94ee9e81b1ec98cf92fa8b9ece0e8153fc044c15ac7ec04e9aa977650d9f": {
+    "role": "assistant",
+    "content": "Calling tool `build_dependency_dag` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_build_dependency_dag_9",
+        "name": "build_dependency_dag",
+        "input": {}
+      }
+    ]
+  },
+  "06217c9a035f999dd04d9ee5a4bdbd106c09740c279521b8226f79979125b9ec": {
+    "role": "assistant",
+    "content": "Calling tool `failure_frontier` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_failure_frontier_11",
+        "name": "failure_frontier",
+        "input": {}
+      }
+    ]
+  },
+  "dbea1e6d31e7ae235c27bbf141e75fcf65012937f2ea104c7c8c9abb3f18ec44": {
+    "role": "assistant",
+    "content": "Calling tool `fit_sim_params` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_fit_sim_params_13",
+        "name": "fit_sim_params",
+        "input": {}
+      }
+    ]
+  },
+  "2f8bc2b026b180be70421de7a6550072b6db30a419804ec9ae36c8db4b406951": {
+    "role": "assistant",
+    "content": "Calling tool `run_counterfactual` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_run_counterfactual_15",
+        "name": "run_counterfactual",
+        "input": {
+          "intervention": "fix_leak"
+        }
+      }
+    ]
+  },
+  "87351b3c3f5a185f6821f35d7c9b41048ca5a6ea16747cc7b13d17edb630b7d5": {
+    "role": "assistant",
+    "content": "Calling tool `run_counterfactual` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_run_counterfactual_17",
+        "name": "run_counterfactual",
+        "input": {
+          "intervention": "pool_size=50"
+        }
+      }
+    ]
+  },
+  "30d5b17c7abb4086c9305c28562d93c127ad8e6b7a6fb943a0775c40c67abad7": {
+    "role": "assistant",
+    "content": "Calling tool `run_counterfactual` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_run_counterfactual_19",
+        "name": "run_counterfactual",
+        "input": {
+          "intervention": "no_retries"
+        }
+      }
+    ]
+  },
+  "c492670e1173a703b86b3e1f97436c3fb6dde5912c556139a89ab4d4bcf5d13d": {
+    "role": "assistant",
+    "content": "All telemetry evidence gathered and simulations verified. Submitting final post-mortem report.",
+    "tool_calls": [
+      {
+        "id": "call_submit_report_21",
+        "name": "submit_report",
+        "input": {}
+      }
+    ]
+  },
+  "3759478bf544984e9c95dcaa50ebe56540dc020f25c25a9e1afc14d994689bd3": {
+    "role": "assistant",
+    "content": "Calling tool `rank_metric_onsets` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_rank_metric_onsets_3",
+        "name": "rank_metric_onsets",
+        "input": {}
+      }
+    ]
+  },
+  "2e0aeaed4c49b00f0bb78255b6d67c20e58b51f2b1cae81a6bdd116aa698e084": {
+    "role": "assistant",
+    "content": "Calling tool `get_metric_derivatives` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_get_metric_derivatives_5",
+        "name": "get_metric_derivatives",
+        "input": {
+          "metric_name": "db_pool.active_connections"
+        }
+      }
+    ]
+  },
+  "1eab107acb548d5720728a90ef535c26b564ace1df368520927f328471912619": {
+    "role": "assistant",
+    "content": "Calling tool `query_spans` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_query_spans_7",
+        "name": "query_spans",
+        "input": {
+          "causal": true,
+          "limit": 50
+        }
+      }
+    ]
+  },
+  "5d780079c05c2f727dfc79b61e271f86d1d863f61b6d7f33df8052c1451f56c2": {
+    "role": "assistant",
+    "content": "Calling tool `build_dependency_dag` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_build_dependency_dag_9",
+        "name": "build_dependency_dag",
+        "input": {}
+      }
+    ]
+  },
+  "b9bc3d28a7499ee587448f73a2cf52042f222b1ba74f5316925e59492b4b7498": {
+    "role": "assistant",
+    "content": "Calling tool `failure_frontier` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_failure_frontier_11",
+        "name": "failure_frontier",
+        "input": {}
+      }
+    ]
+  },
+  "c6abea38ef041975d06aaf0b5af9ea561726ac837e39eeadf9e34769e3dd55e4": {
+    "role": "assistant",
+    "content": "Calling tool `fit_sim_params` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_fit_sim_params_13",
+        "name": "fit_sim_params",
+        "input": {}
+      }
+    ]
+  },
+  "71dc8b0d70458a25e6c02a0f0c6661d7fce35e49af42c52fc9feb607b66ad694": {
+    "role": "assistant",
+    "content": "Calling tool `run_counterfactual` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_run_counterfactual_15",
+        "name": "run_counterfactual",
+        "input": {
+          "intervention": "fix_leak"
+        }
+      }
+    ]
+  },
+  "16b212d6ee964236fb7a67765a143e6c676e573c85c18d8ca31ebd1e246d2993": {
+    "role": "assistant",
+    "content": "Calling tool `run_counterfactual` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_run_counterfactual_17",
+        "name": "run_counterfactual",
+        "input": {
+          "intervention": "pool_size=50"
+        }
+      }
+    ]
+  },
+  "221f6d7f45352510161258a82e5fb7130946286b457c00a0115ad7af975bf42f": {
+    "role": "assistant",
+    "content": "Calling tool `run_counterfactual` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_run_counterfactual_19",
+        "name": "run_counterfactual",
+        "input": {
+          "intervention": "no_retries"
+        }
+      }
+    ]
+  },
+  "91318e3b7c2e8155869e9c56b641e95e96382fa07399e242d07763bfbc1bc17c": {
+    "role": "assistant",
+    "content": "All telemetry evidence gathered and simulations verified. Submitting final post-mortem report.",
+    "tool_calls": [
+      {
+        "id": "call_submit_report_21",
+        "name": "submit_report",
+        "input": {}
+      }
+    ]
+  },
+  "77f0b04499637b3ac545ac3d54e3ec4696c9fcb3930673740557ed3e7517ede2": {
+    "role": "assistant",
+    "content": "Calling tool `rank_metric_onsets` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_rank_metric_onsets_3",
+        "name": "rank_metric_onsets",
+        "input": {}
+      }
+    ]
+  },
+  "1b93dc16a276f0581fe0e58684e765b8f5c148f1d6f32fd15002eb0a19d278fb": {
+    "role": "assistant",
+    "content": "Calling tool `get_metric_derivatives` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_get_metric_derivatives_5",
+        "name": "get_metric_derivatives",
+        "input": {
+          "metric_name": "db_pool.active_connections"
+        }
+      }
+    ]
+  },
+  "305fd53e83e762b583e326c65ef18ec9bfea8c91337cb6e6fff7e2c35e7749db": {
+    "role": "assistant",
+    "content": "Calling tool `query_spans` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_query_spans_7",
+        "name": "query_spans",
+        "input": {
+          "causal": true,
+          "limit": 50
+        }
+      }
+    ]
+  },
+  "c32417d7c07a019808bdcb6086b2e6c115a38703089b1cd1dc599fb03e9038ab": {
+    "role": "assistant",
+    "content": "Calling tool `build_dependency_dag` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_build_dependency_dag_9",
+        "name": "build_dependency_dag",
+        "input": {}
+      }
+    ]
+  },
+  "79f673aeda3d1f00f2d3e3462a77bcb2672e56fcd6da01214b057098f69f3262": {
+    "role": "assistant",
+    "content": "Calling tool `failure_frontier` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_failure_frontier_11",
+        "name": "failure_frontier",
+        "input": {}
+      }
+    ]
+  },
+  "864afe94d95a2330f9658eb2a65173e090063dd065f15d965ca51c1e0557ad27": {
+    "role": "assistant",
+    "content": "Calling tool `fit_sim_params` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_fit_sim_params_13",
+        "name": "fit_sim_params",
+        "input": {}
+      }
+    ]
+  },
+  "41cbdfb811e889377dac8590d4f40c9e4f80dd633fa224a0241acb83fc4cb6f8": {
+    "role": "assistant",
+    "content": "Calling tool `run_counterfactual` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_run_counterfactual_15",
+        "name": "run_counterfactual",
+        "input": {
+          "intervention": "fix_leak"
+        }
+      }
+    ]
+  },
+  "833e6c9de02c2e2d5e20feb1242bc53b46e6084750ba5e96919c7256f9aacaf0": {
+    "role": "assistant",
+    "content": "Calling tool `run_counterfactual` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_run_counterfactual_17",
+        "name": "run_counterfactual",
+        "input": {
+          "intervention": "pool_size=50"
+        }
+      }
+    ]
+  },
+  "c334ee564602c43d1448d7fe4d91ef49864b5502ebd42a69a0a47baa327e255c": {
+    "role": "assistant",
+    "content": "Calling tool `run_counterfactual` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_run_counterfactual_19",
+        "name": "run_counterfactual",
+        "input": {
+          "intervention": "no_retries"
+        }
+      }
+    ]
+  },
+  "eb06572ab49bc6959b0244a9c1898c811f705f298bf392b6d92c3d69c244ca39": {
+    "role": "assistant",
+    "content": "All telemetry evidence gathered and simulations verified. Submitting final post-mortem report.",
+    "tool_calls": [
+      {
+        "id": "call_submit_report_21",
+        "name": "submit_report",
+        "input": {}
+      }
+    ]
+  },
+  "8bf72917b1fa118691085086619ef4e5a8853dcfdc4921ffbbfec40df52ea5a2": {
+    "role": "assistant",
+    "content": "Calling tool `failure_frontier` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_failure_frontier_11",
+        "name": "failure_frontier",
+        "input": {}
+      }
+    ]
+  },
+  "fb4f5daff375a13cf69c3df760c64a16a54600fd1bd79e351f11e4079918f601": {
+    "role": "assistant",
+    "content": "Calling tool `fit_sim_params` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_fit_sim_params_13",
+        "name": "fit_sim_params",
+        "input": {}
+      }
+    ]
+  },
+  "443d8ae05039192f96b5ca253065b1cdc265f1b958aa01b82901a9213143cfc3": {
+    "role": "assistant",
+    "content": "Calling tool `run_counterfactual` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_run_counterfactual_15",
+        "name": "run_counterfactual",
+        "input": {
+          "intervention": "fix_leak"
+        }
+      }
+    ]
+  },
+  "76aa8ffceb971c10047d9c4b20497703e7e409db9907fb029f5fca350082857b": {
+    "role": "assistant",
+    "content": "Calling tool `run_counterfactual` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_run_counterfactual_17",
+        "name": "run_counterfactual",
+        "input": {
+          "intervention": "pool_size=50"
+        }
+      }
+    ]
+  },
+  "d05afe0edd4339269f9dfcfb6406c727f6ac44bce4f974b84668503c6b3e5a42": {
+    "role": "assistant",
+    "content": "Calling tool `run_counterfactual` to gather causal incident telemetry.",
+    "tool_calls": [
+      {
+        "id": "call_run_counterfactual_19",
+        "name": "run_counterfactual",
+        "input": {
+          "intervention": "no_retries"
+        }
+      }
+    ]
+  },
+  "fdb0a14eca3cec83b6cc8296ce4bf8d82623f584a5b1938597d75c355d7dcd91": {
+    "role": "assistant",
+    "content": "All telemetry evidence gathered and simulations verified. Submitting final post-mortem report.",
+    "tool_calls": [
+      {
+        "id": "call_submit_report_21",
+        "name": "submit_report",
+        "input": {}
+      }
+    ]
   }
 }
