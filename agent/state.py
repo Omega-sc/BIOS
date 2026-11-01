@@ -49,6 +49,10 @@ class IncidentState(BaseModel):
 
     # Timeline & synthesized report
     timeline_events: list[TimelineEvent] = Field(default_factory=list)
+    incident_detected: bool = True
+    data_quality: dict = Field(default_factory=dict)
+    limitations: list[str] = Field(default_factory=list)
+    investigation_seconds: float | None = None
     report: IncidentReport | None = None
 
     # Step tracing and LLM messaging

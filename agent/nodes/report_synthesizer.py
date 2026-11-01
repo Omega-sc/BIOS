@@ -29,230 +29,114 @@ def synthesize_timeline_events(state: IncidentState) -> list[TimelineEvent]:
     """Reconstruct chronological timeline events from verified database telemetry."""
     events: list[TimelineEvent] = []
     offsets = state.clock_offsets or {}
-    auth_offset_ms = int(offsets.get("auth-service", 0.0) * 1000)
 
     conn = sqlite3.connect(state.db_path)
     try:
         cur = conn.cursor()
 
-        cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='metrics'")
-        has_metrics = cur.fetchone() is not None
         cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='logs'")
         has_logs = cur.fetchone() is not None
         cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='spans'")
         has_spans = cur.fetchone() is not None
 
-        # 1. Baseline healthy event
-        if has_metrics:
-            cur.execute(
-                "SELECT ts_ms, value FROM metrics WHERE metric = 'db_pool.active_connections' "
-                "ORDER BY ts_ms ASC LIMIT 1"
-            )
-            base_row = cur.fetchone()
-        else:
-            base_row = None
-        if base_row:
-            base_ts = base_row[0]
-            events.append(
-                TimelineEvent(
-                    order=1,
-                    t_corrected_ms=base_ts,
-                    service="db-pool",
-                    description=f"Baseline connection pool utilization is healthy at {base_row[1]:.1f} active connections.",
-                    claim_type="verified_fact",
-                    evidence=[
-                        EvidencePointer(
-                            kind="metric",
-                            id=f"db_pool.active_connections@{base_ts}",
-                            note="Initial connection pool baseline reading",
-                        )
-                    ],
-                )
-            )
-
-        # 2. Connection pool saturation / onset
-        pool_onset_ts = None
+        # 1. Add anomalous metric onset events
+        seen_metrics: set[str] = set()
         for o in state.metric_onsets:
-            if o.metric == "db_pool.active_connections" and o.onset_corrected_ms:
-                pool_onset_ts = o.onset_corrected_ms
-                break
+            if o.onset_corrected_ms is not None and o.metric not in seen_metrics:
+                seen_metrics.add(o.metric)
+                cur.execute("SELECT service FROM metrics WHERE metric = ? LIMIT 1", (o.metric,))
+                s_row = cur.fetchone()
+                svc = s_row[0] if s_row else o.service
+                corr_ms = int(offsets.get(svc, 0.0) * 1000)
+                raw_ts = o.onset_corrected_ms + corr_ms
 
-        if pool_onset_ts is None and has_metrics:
-            # Query highest reading or first elevated reading
-            cur.execute(
-                "SELECT ts_ms, value FROM metrics WHERE metric = 'db_pool.active_connections' "
-                "AND value >= 10.0 ORDER BY ts_ms ASC LIMIT 1"
-            )
-            r = cur.fetchone()
-            if r:
-                pool_onset_ts = r[0]
-
-        if pool_onset_ts:
-            events.append(
-                TimelineEvent(
-                    order=2,
-                    t_corrected_ms=pool_onset_ts,
-                    service="db-pool",
-                    description="Connection pool approaches saturation ceiling as active connections surge.",
-                    claim_type="verified_fact",
-                    evidence=[
-                        EvidencePointer(
-                            kind="metric",
-                            id=f"db_pool.active_connections@{pool_onset_ts}",
-                            note="Anomalous active connections onset / saturation",
-                        )
-                    ],
+                # Find closest real reading
+                cur.execute(
+                    "SELECT ts_ms, value FROM metrics WHERE metric = ? AND abs(ts_ms - ?) <= 15000 LIMIT 1",
+                    (o.metric, raw_ts),
                 )
-            )
+                pt_row = cur.fetchone()
+                actual_raw_ts = pt_row[0] if pt_row else raw_ts
 
-        # 3. Auth error / connection leak log
-        if has_logs:
-            cur.execute(
-                "SELECT log_id, ts_ms, message FROM logs WHERE service = 'auth-service' "
-                "AND (message LIKE '%leak%' OR message LIKE '%release%') ORDER BY ts_ms ASC LIMIT 1"
-            )
-            auth_log_row = cur.fetchone()
-        else:
-            auth_log_row = None
-
-        if auth_log_row:
-            log_id, raw_ts, msg = auth_log_row
-            corrected_auth_ts = raw_ts - auth_offset_ms
-            events.append(
-                TimelineEvent(
-                    order=3,
-                    t_corrected_ms=corrected_auth_ts,
-                    service="auth-service",
-                    description="Auth-service unhandled error path skips connection release in token validator.",
-                    claim_type="inference",
-                    evidence=[
-                        EvidencePointer(
-                            kind="log",
-                            id=log_id,
-                            note=f"Log confirms unhandled exception skipped release: {msg}",
-                        )
-                    ],
+                events.append(
+                    TimelineEvent(
+                        order=len(events) + 1,
+                        t_corrected_ms=o.onset_corrected_ms,
+                        service=svc,
+                        description=f"Anomalous metric onset detected on {svc} for metric {o.metric}.",
+                        claim_type="verified_fact",
+                        evidence=[
+                            EvidencePointer(
+                                kind="metric",
+                                id=f"{o.metric}@{actual_raw_ts}",
+                                note=f"Anomalous onset identified at corrected t={o.onset_corrected_ms}",
+                            )
+                        ],
+                    )
                 )
-            )
 
-        # 4. Gateway 504 errors onset
-        gw_onset_ts = None
-        for o in state.metric_onsets:
-            if o.metric == "gateway.error_rate_5xx" and o.onset_corrected_ms:
-                gw_onset_ts = o.onset_corrected_ms
-                break
-
-        gw_evidence: list[EvidencePointer] = []
-        if gw_onset_ts:
-            gw_evidence.append(
-                EvidencePointer(
-                    kind="metric",
-                    id=f"gateway.error_rate_5xx@{gw_onset_ts}",
-                    note="Gateway 5xx error rate spikes above baseline",
-                )
-            )
-
+        # 2. Add first error span event
         if has_spans:
             cur.execute(
-                "SELECT span_id, start_ms FROM spans WHERE service = 'gateway' AND status_code = 504 "
-                "ORDER BY start_ms ASC LIMIT 1"
+                "SELECT span_id, service, start_ms, status_code, name FROM spans WHERE status_code >= 500 ORDER BY start_ms ASC LIMIT 1"
             )
-            gw_span_row = cur.fetchone()
-        else:
-            gw_span_row = None
-
-        if gw_span_row:
-            gw_evidence.append(
-                EvidencePointer(
-                    kind="span",
-                    id=gw_span_row[0],
-                    note=f"First observed HTTP 504 span on gateway at t={gw_span_row[1]}",
+            sp_row = cur.fetchone()
+            if sp_row:
+                sp_id, sp_svc, sp_start, sp_code, sp_name = sp_row
+                sp_offset = int(offsets.get(sp_svc, 0.0) * 1000)
+                events.append(
+                    TimelineEvent(
+                        order=len(events) + 1,
+                        t_corrected_ms=sp_start - sp_offset,
+                        service=sp_svc,
+                        description=f"First observed HTTP {sp_code} error span ({sp_name}) on service {sp_svc}.",
+                        claim_type="verified_fact",
+                        evidence=[
+                            EvidencePointer(
+                                kind="span",
+                                id=sp_id,
+                                note=f"First observed error span on {sp_svc} (status {sp_code})",
+                            )
+                        ],
+                    )
                 )
-            )
-            if gw_onset_ts is None:
-                gw_onset_ts = gw_span_row[1]
 
-        if gw_onset_ts:
-            events.append(
-                TimelineEvent(
-                    order=4,
-                    t_corrected_ms=gw_onset_ts,
-                    service="gateway",
-                    description="Gateway returns HTTP 504 timeouts to citizens due to auth-service checkout delays.",
-                    claim_type="verified_fact",
-                    evidence=gw_evidence,
-                )
-            )
-
-        # 5. Frontend CPU spike / retry cascade
-        cpu_onset_ts = None
-        for o in state.metric_onsets:
-            if o.metric == "frontend.cpu_pct" and o.onset_corrected_ms:
-                cpu_onset_ts = o.onset_corrected_ms
-                break
-
-        fe_evidence: list[EvidencePointer] = []
-        if cpu_onset_ts:
-            fe_evidence.append(
-                EvidencePointer(
-                    kind="metric",
-                    id=f"frontend.cpu_pct@{cpu_onset_ts}",
-                    note="Frontend CPU utilization spikes above baseline",
-                )
-            )
-
+        # 3. Add first relevant error or leak log event
         if has_logs:
             cur.execute(
-                "SELECT log_id, ts_ms, message FROM logs WHERE service = 'frontend' "
-                "AND (message LIKE '%retry%' OR message LIKE '%504%') ORDER BY ts_ms ASC LIMIT 1"
+                "SELECT log_id, service, ts_ms, message FROM logs WHERE "
+                "level IN ('ERROR', 'FATAL') OR message LIKE '%leak%' OR message LIKE '%release%' "
+                "OR message LIKE '%timeout%' OR message LIKE '%retry%' ORDER BY ts_ms ASC LIMIT 1"
             )
-            fe_log_row = cur.fetchone()
-        else:
-            fe_log_row = None
-
-        if fe_log_row:
-            fe_evidence.append(
-                EvidencePointer(
-                    kind="log",
-                    id=fe_log_row[0],
-                    note=f"Client retry log: {fe_log_row[2]}",
+            log_row = cur.fetchone()
+            if log_row:
+                lg_id, lg_svc, lg_ts, lg_msg = log_row
+                lg_offset = int(offsets.get(lg_svc, 0.0) * 1000)
+                events.append(
+                    TimelineEvent(
+                        order=len(events) + 1,
+                        t_corrected_ms=lg_ts - lg_offset,
+                        service=lg_svc,
+                        description=f"Error log on service {lg_svc}: {lg_msg[:80]}.",
+                        claim_type="verified_fact",
+                        evidence=[
+                            EvidencePointer(
+                                kind="log",
+                                id=lg_id,
+                                note=f"Log: {lg_msg[:60]}",
+                            )
+                        ],
+                    )
                 )
-            )
-            if cpu_onset_ts is None:
-                cpu_onset_ts = fe_log_row[1]
-
-        if cpu_onset_ts:
-            events.append(
-                TimelineEvent(
-                    order=5,
-                    t_corrected_ms=cpu_onset_ts,
-                    service="frontend",
-                    description="Frontend CPU spikes due to client retry cascade amplifying request load.",
-                    claim_type="verified_fact",
-                    evidence=fe_evidence,
-                )
-            )
 
     finally:
         conn.close()
 
     if not events:
-        events.append(
-            TimelineEvent(
-                order=1,
-                t_corrected_ms=1700000000000,
-                service="gateway",
-                description="Investigation baseline established from telemetry.",
-                claim_type="inference",
-                evidence=[
-                    EvidencePointer(
-                        kind="metric",
-                        id="db_pool.active_connections@1700000000000",
-                        note="Baseline metric reading",
-                    )
-                ],
-            )
-        )
+        msg = "No anomalous timeline events could be reconstructed from available telemetry."
+        if msg not in state.limitations:
+            state.limitations.append(msg)
+        return []
 
     # Sort strictly by corrected time ascending and assign sequential orders
     events.sort(key=lambda e: e.t_corrected_ms)
@@ -303,11 +187,15 @@ def synthesize_incident_report(state: IncidentState) -> IncidentReport:
 
     report = IncidentReport(
         schema_version="1.0",
+        incident_detected=state.incident_detected,
         timeline_events=timeline_events,
         hypotheses_evaluated=state.hypotheses,
         evidence_pointers=all_pointers,
         estimated_clock_offsets_s=state.clock_offsets,
         remediation=REMEDIATION_RECOMMENDATIONS,
+        data_quality=state.data_quality,
+        limitations=state.limitations,
+        investigation_seconds=state.investigation_seconds,
     )
 
     # Validate synthesized report

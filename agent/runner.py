@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Literal
@@ -43,34 +45,50 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 REPLAY_DIR = ROOT_DIR / "fixtures" / "replay"
 
 
-def _get_replay_file_for_db(db_path: str) -> Path | None:
-    """Find appropriate pre-recorded replay file based on db_path."""
-    if not REPLAY_DIR.exists():
-        return None
+def compute_db_content_hash(db_path: str | Path | sqlite3.Connection) -> str:
+    """Compute deterministic SHA256 content hash across all database tables in canonical order."""
+    close = False
+    if isinstance(db_path, (str, Path)):
+        p = Path(db_path)
+        if not p.exists():
+            return ""
+        if str(p).endswith(".jsonl"):
+            import tempfile
 
-    path_lower = str(db_path).lower().replace("\\", "/")
-    if "tiny" in path_lower:
-        candidate = REPLAY_DIR / "tiny_telemetry_replay.json"
-        if candidate.exists():
-            return candidate
+            from ingest.load_jsonl import load_telemetry
 
-    if "incident.db" in path_lower or path_lower in ("data/incident.db", "incident.db"):
-        candidate = REPLAY_DIR / "incident_db_replay.json"
-        if candidate.exists():
-            return candidate
+            tmp_dir = tempfile.mkdtemp()
+            tmp_db = Path(tmp_dir) / "hash_tmp.db"
+            try:
+                load_telemetry(p, tmp_db)
+                return compute_db_content_hash(tmp_db)
+            finally:
+                if tmp_db.exists():
+                    try:
+                        tmp_db.unlink()
+                    except Exception:
+                        pass
+        conn = sqlite3.connect(str(p))
+        close = True
+    else:
+        conn = db_path
 
-    # Check stem
-    stem = Path(db_path).stem
-    candidate = REPLAY_DIR / f"{stem}_replay.json"
-    if candidate.exists():
-        return candidate
-
-    # Default to incident_db_replay if available
-    default_candidate = REPLAY_DIR / "incident_db_replay.json"
-    if default_candidate.exists():
-        return default_candidate
-
-    return None
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name ASC")
+        tables = [r[0] for r in cur.fetchall() if not r[0].startswith("sqlite_")]
+        hasher = hashlib.sha256()
+        for t in tables:
+            hasher.update(t.encode("utf-8"))
+            cur.execute(f"SELECT * FROM {t} ORDER BY rowid ASC")
+            for row in cur.fetchall():
+                hasher.update(str(row).encode("utf-8"))
+        return hasher.hexdigest()
+    except Exception:
+        return ""
+    finally:
+        if close:
+            conn.close()
 
 
 def _run_scripted_pipeline(state: IncidentState) -> Iterator[AgentEvent]:
@@ -88,17 +106,35 @@ def _run_scripted_pipeline(state: IncidentState) -> Iterator[AgentEvent]:
 
 
 def _run_replay_mode(db_path: str) -> Iterator[AgentEvent]:
-    """Stream pre-recorded replay events from fixtures/replay/ completely offline."""
-    replay_file = _get_replay_file_for_db(db_path)
-    if replay_file and replay_file.exists():
-        with open(replay_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        for item in data:
-            yield AgentEvent.model_validate(item)
+    """Stream pre-recorded replay events on exact DB content hash match, or recompute."""
+    current_hash = compute_db_content_hash(db_path)
+    matched_events: list[dict] | None = None
+
+    if current_hash and REPLAY_DIR.exists():
+        for replay_file in sorted(REPLAY_DIR.glob("*.json")):
+            if replay_file.name == "llm_cache.json":
+                continue
+            try:
+                with open(replay_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict) and data.get("db_content_hash") == current_hash:
+                    matched_events = data.get("events", [])
+                    break
+            except Exception:
+                continue
+
+    if matched_events:
+        for item in matched_events:
+            ev = AgentEvent.model_validate(item)
+            ev.payload["provenance"] = "recorded"
+            yield ev
     else:
-        # Fallback to scripted run if recording not found
+        # No exact hash match -> execute real pipeline dynamically with provenance='recomputed'
         state = IncidentState(db_path=db_path, mode="replay")
-        yield from _run_scripted_pipeline(state)
+        state.data_quality["provenance"] = "recomputed"
+        for ev in _run_scripted_pipeline(state):
+            ev.payload["provenance"] = "recomputed"
+            yield ev
 
 
 def _run_live_mode(db_path: str, max_steps: int = 12) -> Iterator[AgentEvent]:

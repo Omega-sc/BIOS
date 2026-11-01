@@ -1,7 +1,7 @@
 """Clock skew estimation module (owned by P2).
 
 Estimates per-service clock skew from cross-service parent->child spans during
-healthy baseline without reading contracts.constants.SKEW_MS or ground truth.
+healthy baseline without reading configuration constants or ground truth.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ def estimate_clock_offsets(db: str | Path | sqlite3.Connection) -> dict[str, flo
 
     Analyzes cross-service parent->child spans during healthy baseline (status_code == 200)
     to compute relative clock offsets, subtracting minimal network/dispatch latency.
-    The entrypoint/gateway service serves as the 0.0 reference clock.
+    The discovered reference service serves as the 0.0 reference clock.
 
     Returns:
         dict[str, float]: Mapping from service name to estimated clock offset in seconds.
@@ -36,7 +36,7 @@ def estimate_clock_offsets(db: str | Path | sqlite3.Connection) -> dict[str, flo
         # Check if spans table exists
         cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='spans'")
         if not cur.fetchone():
-            return {"gateway": 0.0, "auth-service": 0.0, "db-pool": 0.0}
+            return {}
 
         # Query all distinct services
         cur.execute("SELECT DISTINCT service FROM spans")
@@ -46,23 +46,27 @@ def estimate_clock_offsets(db: str | Path | sqlite3.Connection) -> dict[str, flo
             services = {row[0] for row in cur.fetchall()}
 
         if not services:
-            return {"gateway": 0.0, "auth-service": 0.0, "db-pool": 0.0}
+            return {}
 
-        # Identify reference service: prioritize gateway, then db-pool, then entrypoint with root spans
+        # Identify reference service: service owning the most root spans (parent_span_id IS NULL)
         cur.execute(
             "SELECT service, COUNT(*) FROM spans WHERE parent_span_id IS NULL GROUP BY service ORDER BY COUNT(*) DESC LIMIT 1"
         )
         root_row = cur.fetchone()
         root_span_service = root_row[0] if root_row else None
 
-        if "gateway" in services:
-            ref_service = "gateway"
-        elif "db-pool" in services:
-            ref_service = "db-pool"
-        elif root_span_service:
+        if root_span_service:
             ref_service = root_span_service
         else:
-            ref_service = sorted(services)[0]
+            # Fallback: most-called upstream service in cross-service spans
+            cur.execute(
+                "SELECT p.service, COUNT(*) FROM spans p JOIN spans c ON p.span_id = c.parent_span_id WHERE p.service != c.service GROUP BY p.service ORDER BY COUNT(*) DESC LIMIT 1"
+            )
+            up_row = cur.fetchone()
+            if up_row and up_row[0]:
+                ref_service = up_row[0]
+            else:
+                ref_service = sorted(services)[0]
 
         # Query parent-child span deltas during healthy baseline (before leak/error onset)
         cur.execute(
@@ -158,8 +162,8 @@ def estimate_clock_offsets(db: str | Path | sqlite3.Connection) -> dict[str, flo
         return offsets_s
 
     except Exception:
-        # Graceful fallback on malformed database
-        return {"gateway": 0.0, "auth-service": 0.0, "db-pool": 0.0}
+        # Fallback returns empty dict
+        return {}
     finally:
         if should_close:
             conn.close()

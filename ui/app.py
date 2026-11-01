@@ -446,8 +446,6 @@ with st.sidebar:
         f"""
         - **Source:** `{Path(raw_dataset_path).name}`
         - **Format:** `{"SQLite DB" if raw_dataset_path.endswith(".db") else "JSONL Telemetry"}`
-        - **Known Skew:** `auth-service` (+12.0s uncorrected)
-        - **Target Services:** `gateway`, `auth-service`, `db-pool`, `frontend`
         """
     )
 
@@ -459,6 +457,15 @@ st.title("Autonomous Incident Investigation")
 st.markdown(
     "Multi-Service Post-Mortem & Timeline Reconstruction Under Telemetry Skew, Clock Desynchronization & Packet Loss"
 )
+
+is_recorded_run = any(
+    (getattr(e, "payload", {}).get("provenance") == "recorded")
+    for e in st.session_state.get("events", [])
+)
+if is_recorded_run:
+    st.info(
+        "⏺️ **RECORDED RUN** — Pre-recorded execution trace verified by exact database content hash."
+    )
 
 # Handle Investigation Execution
 if start_investigation:

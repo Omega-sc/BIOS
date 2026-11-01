@@ -96,24 +96,51 @@ def test_tools_stubs():
     with open(ROOT_DIR / "contracts" / "schema.sql", "r", encoding="utf-8") as f:
         conn.executescript(f.read())
 
+    # Invariant: Empty DB must not fabricate offsets, spans, or topology
     offsets = estimate_clock_offsets(conn)
-    assert isinstance(offsets, dict)
-    assert "auth-service" in offsets
+    assert offsets == {}
 
     spans = query_spans(conn)
-    assert isinstance(spans, list)
+    assert spans == []
 
     onsets = rank_metric_onsets(conn)
-    assert len(onsets) > 0
+    assert onsets == []
 
     deriv = get_metric_derivatives(conn, "db_pool.active_connections")
     assert deriv.metric == "db_pool.active_connections"
+    assert deriv.peak_slope == 0.0
 
     dag = build_dependency_dag(conn)
-    assert dag.number_of_nodes() > 0
+    assert dag.number_of_nodes() == 0
 
     frontier = failure_frontier(dag)
-    assert isinstance(frontier, str)
+    assert frontier is None
+
+    # Invariant: Populated DB discovers topology and offsets dynamically
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO spans (span_id, trace_id, parent_span_id, service, name, start_ms, end_ms, status_code, attrs) "
+        "VALUES ('s1', 't1', NULL, 'srv-a', 'root', 1000, 1050, 0, '{}')"
+    )
+    cur.execute(
+        "INSERT INTO spans (span_id, trace_id, parent_span_id, service, name, start_ms, end_ms, status_code, attrs) "
+        "VALUES ('s2', 't1', 's1', 'srv-b', 'child', 1010, 1030, 0, '{}')"
+    )
+    conn.commit()
+
+    offsets_pop = estimate_clock_offsets(conn)
+    assert isinstance(offsets_pop, dict)
+    assert "srv-a" in offsets_pop and "srv-b" in offsets_pop
+
+    spans_pop = query_spans(conn)
+    assert len(spans_pop) == 2
+
+    dag_pop = build_dependency_dag(conn)
+    assert dag_pop.number_of_nodes() == 2
+
+    frontier_pop = failure_frontier(dag_pop)
+    assert frontier_pop is None or isinstance(frontier_pop, str)
+
     conn.close()
 
 

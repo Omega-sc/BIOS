@@ -1,70 +1,118 @@
-[
-  {
-    "type": "state",
-    "node": "telemetry_ingestion",
-    "payload": {
-      "status": "started",
-      "db_path": "D:\\BIOS\\data\\tiny_replay_tmp.db",
-      "mode": "scripted"
-    }
-  },
-  {
-    "type": "tool_call",
-    "node": "telemetry_ingestion",
-    "payload": {
-      "tool": "estimate_clock_offsets",
-      "args": {
-        "db": "D:\\BIOS\\data\\tiny_replay_tmp.db"
+{
+  "db_content_hash": "8c161c782d4ea8a18bc17f71a22969721c0a1a6421b3f401345407a3ca29e03f",
+  "events": [
+    {
+      "type": "state",
+      "node": "telemetry_ingestion",
+      "payload": {
+        "status": "started",
+        "db_path": "D:\\BIOS\\data\\tiny_replay_tmp.db",
+        "mode": "scripted"
       }
-    }
-  },
-  {
-    "type": "tool_result",
-    "node": "telemetry_ingestion",
-    "payload": {
-      "tool": "estimate_clock_offsets",
-      "result": {
-        "db-pool": 0.0,
-        "gateway": 0.0,
-        "auth-service": 12.0
+    },
+    {
+      "type": "tool_call",
+      "node": "telemetry_ingestion",
+      "payload": {
+        "tool": "estimate_clock_offsets",
+        "args": {
+          "db": "D:\\BIOS\\data\\tiny_replay_tmp.db"
+        }
       }
-    }
-  },
-  {
-    "type": "tool_call",
-    "node": "telemetry_ingestion",
-    "payload": {
-      "tool": "rank_metric_onsets",
-      "args": {
-        "db": "D:\\BIOS\\data\\tiny_replay_tmp.db"
+    },
+    {
+      "type": "tool_result",
+      "node": "telemetry_ingestion",
+      "payload": {
+        "tool": "estimate_clock_offsets",
+        "result": {
+          "gateway": 0.0,
+          "db-pool": 0.0,
+          "auth-service": 12.0
+        }
       }
-    }
-  },
-  {
-    "type": "tool_result",
-    "node": "telemetry_ingestion",
-    "payload": {
-      "tool": "rank_metric_onsets",
-      "result": [
-        {
-          "metric": "auth.latency_p99",
-          "service": "auth-service",
-          "onset_corrected_ms": 1700000000000,
-          "peak_slope": 0.0,
-          "z_score": 0.0,
-          "baseline_mean": 1788.33,
-          "baseline_std": 2412.61
-        },
-        {
-          "metric": "db_pool.wait_queue_len",
-          "service": "db-pool",
-          "onset_corrected_ms": 1700000000000,
-          "peak_slope": 0.0,
-          "z_score": 0.0,
-          "baseline_mean": 11.0,
-          "baseline_std": 11.47
-        },
-        {
+    },
+    {
+      "type": "tool_call",
+      "node": "telemetry_ingestion",
+      "payload": {
+        "tool": "rank_metric_onsets",
+        "args": {
+          "db": "D:\\BIOS\\data\\tiny_replay_tmp.db"
+        }
+      }
+    },
+    {
+      "type": "tool_result",
+      "node": "telemetry_ingestion",
+      "payload": {
+        "tool": "rank_metric_onsets",
+        "result": [
+          {
+            "metric": "auth.latency_p99",
+            "service": "auth-service",
+            "onset_corrected_ms": 1700000000000,
+            "peak_slope": 0.0,
+            "z_score": 0.0,
+            "baseline_mean": 1788.33,
+            "baseline_std": 2412.61
+          },
+          {
+            "metric": "db_pool.wait_queue_len",
+            "service": "db-pool",
+            "onset_corrected_ms": 1700000000000,
+            "peak_slope": 0.0,
+            "z_score": 0.0,
+            "baseline_mean": 11.0,
+            "baseline_std": 11.47
+          },
+          {
+            "metric": "db_pool.active_connections",
+            "service": "db-pool",
+            "onset_corrected_ms": null,
+            "peak_slope": 0.2,
+            "z_score": 0.79,
+            "baseline_mean": 14.0,
+            "baseline_std": 7.59
+          },
+          {
+            "metric": "frontend.cpu_pct",
+            "service": "frontend",
+            "onset_corrected_ms": null,
+            "peak_slope": 0.095,
+            "z_score": 0.58,
+            "baseline_mean": 77.1,
+            "baseline_std": 32.65
+          },
+          {
+            "metric": "gateway.error_rate_5xx",
+            "service": "gateway",
+            "onset_corrected_ms": null,
+            "peak_slope": 0.002,
+            "z_score": 0.76,
+            "baseline_mean": 0.68,
+            "baseline_std": 0.36
+          }
+        ]
+      }
+    },
+    {
+      "type": "tool_call",
+      "node": "telemetry_ingestion",
+      "payload": {
+        "tool": "get_metric_derivatives",
+        "args": {
+          "db": "D:\\BIOS\\data\\tiny_replay_tmp.db",
+          "metric_name": "db_pool.active_connections"
+        }
+      }
+    },
+    {
+      "type": "tool_result",
+      "node": "telemetry_ingestion",
+      "payload": {
+        "tool": "get_metric_derivatives",
+        "result": {
           "metric": "db_pool.active_connections",
           "service": "db-pool",
           "onset_corrected_ms": null,
@@ -72,587 +120,557 @@
           "z_score": 0.79,
           "baseline_mean": 14.0,
           "baseline_std": 7.59
-        },
-        {
-          "metric": "frontend.cpu_pct",
-          "service": "frontend",
-          "onset_corrected_ms": null,
-          "peak_slope": 0.095,
-          "z_score": 0.58,
-          "baseline_mean": 77.1,
-          "baseline_std": 32.65
-        },
-        {
-          "metric": "gateway.error_rate_5xx",
-          "service": "gateway",
-          "onset_corrected_ms": null,
-          "peak_slope": 0.002,
-          "z_score": 0.76,
-          "baseline_mean": 0.68,
-          "baseline_std": 0.36
         }
-      ]
-    }
-  },
-  {
-    "type": "tool_call",
-    "node": "telemetry_ingestion",
-    "payload": {
-      "tool": "get_metric_derivatives",
-      "args": {
-        "db": "D:\\BIOS\\data\\tiny_replay_tmp.db",
-        "metric_name": "db_pool.active_connections"
       }
-    }
-  },
-  {
-    "type": "tool_result",
-    "node": "telemetry_ingestion",
-    "payload": {
-      "tool": "get_metric_derivatives",
-      "result": {
-        "metric": "db_pool.active_connections",
-        "service": "db-pool",
-        "onset_corrected_ms": null,
-        "peak_slope": 0.2,
-        "z_score": 0.79,
-        "baseline_mean": 14.0,
-        "baseline_std": 7.59
+    },
+    {
+      "type": "tool_call",
+      "node": "telemetry_ingestion",
+      "payload": {
+        "tool": "query_spans",
+        "args": {
+          "db": "D:\\BIOS\\data\\tiny_replay_tmp.db",
+          "limit": 50,
+          "causal": true
+        }
       }
-    }
-  },
-  {
-    "type": "tool_call",
-    "node": "telemetry_ingestion",
-    "payload": {
-      "tool": "query_spans",
-      "args": {
-        "db": "D:\\BIOS\\data\\tiny_replay_tmp.db",
-        "limit": 50,
-        "causal": true
+    },
+    {
+      "type": "tool_result",
+      "node": "telemetry_ingestion",
+      "payload": {
+        "tool": "query_spans",
+        "count": 12,
+        "orphan_count": 0
       }
-    }
-  },
-  {
-    "type": "tool_result",
-    "node": "telemetry_ingestion",
-    "payload": {
-      "tool": "query_spans",
-      "count": 12,
-      "orphan_count": 0
-    }
-  },
-  {
-    "type": "state",
-    "node": "topology_builder",
-    "payload": {
-      "status": "building_dag"
-    }
-  },
-  {
-    "type": "tool_call",
-    "node": "topology_builder",
-    "payload": {
-      "tool": "build_dependency_dag",
-      "args": {
-        "db": "D:\\BIOS\\data\\tiny_replay_tmp.db"
+    },
+    {
+      "type": "state",
+      "node": "topology_builder",
+      "payload": {
+        "status": "building_dag"
       }
-    }
-  },
-  {
-    "type": "tool_call",
-    "node": "topology_builder",
-    "payload": {
-      "tool": "failure_frontier",
-      "args": {
-        "dag": "<graph>",
-        "db": "D:\\BIOS\\data\\tiny_replay_tmp.db"
+    },
+    {
+      "type": "tool_call",
+      "node": "topology_builder",
+      "payload": {
+        "tool": "build_dependency_dag",
+        "args": {
+          "db": "D:\\BIOS\\data\\tiny_replay_tmp.db"
+        }
       }
-    }
-  },
-  {
-    "type": "tool_result",
-    "node": "topology_builder",
-    "payload": {
-      "tool": "build_dependency_dag",
-      "nodes": [
-        "auth-service",
-        "db-pool",
-        "gateway",
-        "frontend"
-      ],
-      "edges": [
-        [
-          "auth-service",
-          "db-pool"
-        ],
-        [
+    },
+    {
+      "type": "tool_call",
+      "node": "topology_builder",
+      "payload": {
+        "tool": "failure_frontier",
+        "args": {
+          "dag": "<graph>",
+          "db": "D:\\BIOS\\data\\tiny_replay_tmp.db"
+        }
+      }
+    },
+    {
+      "type": "tool_result",
+      "node": "topology_builder",
+      "payload": {
+        "tool": "build_dependency_dag",
+        "nodes": [
           "gateway",
+          "frontend",
+          "db-pool",
           "auth-service"
         ],
-        [
-          "frontend",
-          "gateway"
-        ]
-      ],
-      "frontier": "auth-service -> db-pool"
-    }
-  },
-  {
-    "type": "state",
-    "node": "hypothesis_generator",
-    "payload": {
-      "status": "evaluating_hypotheses"
-    }
-  },
-  {
-    "type": "hypothesis",
-    "node": "hypothesis_generator",
-    "payload": {
-      "id": "H1",
-      "statement": "auth-service leaks DB connections on error path, exhausting pool and causing gateway 504 timeouts.",
-      "confidence": 0.9873,
-      "verdict": "root_cause",
-      "supporting": [
-        {
-          "kind": "metric",
-          "id": "db_pool.active_connections@1700000090000",
-          "note": "Peak value 20.00 observed at t=1700000090000"
-        },
-        {
-          "kind": "log",
-          "id": "log-auth-5",
-          "note": "Connection leak: unhandled exception in token validator skipped release()"
-        },
-        {
-          "kind": "span",
-          "id": "span-gw-3",
-          "note": "First gateway 504 timeout span (GET /auth/verify) at t=1700000095000"
-        }
-      ],
-      "refuting": [],
-      "counterfactual": null
-    }
-  },
-  {
-    "type": "hypothesis",
-    "node": "hypothesis_generator",
-    "payload": {
-      "id": "H2",
-      "statement": "Frontend retry storm caused downstream server overload and gateway timeouts.",
-      "confidence": 0.01,
-      "verdict": "contributing_factor",
-      "supporting": [
-        {
-          "kind": "log",
-          "id": "log-fe-1",
-          "note": "Gateway 504 received, initiating exponential backoff retry storm"
-        }
-      ],
-      "refuting": [
-        {
-          "kind": "metric",
-          "id": "gateway.error_rate_5xx@1700000000000",
-          "note": "Baseline reading at t=1700000000000"
-        }
-      ],
-      "counterfactual": null
-    }
-  },
-  {
-    "type": "hypothesis",
-    "node": "hypothesis_generator",
-    "payload": {
-      "id": "H3",
-      "statement": "Slow database queries saturated connection pool and caused timeout cascade.",
-      "confidence": 0.01,
-      "verdict": "rejected",
-      "supporting": [],
-      "refuting": [],
-      "counterfactual": null
-    }
-  },
-  {
-    "type": "hypothesis",
-    "node": "hypothesis_generator",
-    "payload": {
-      "id": "H4",
-      "statement": "Gateway timeout misconfiguration prematurely aborted healthy downstream requests.",
-      "confidence": 0.01,
-      "verdict": "rejected",
-      "supporting": [],
-      "refuting": [
-        {
-          "kind": "metric",
-          "id": "db_pool.active_connections@1700000090000",
-          "note": "Peak value 20.00 observed at t=1700000090000"
-        }
-      ],
-      "counterfactual": null
-    }
-  },
-  {
-    "type": "state",
-    "node": "counterfactual_verifier",
-    "payload": {
-      "status": "running_simulation"
-    }
-  },
-  {
-    "type": "tool_call",
-    "node": "counterfactual_verifier",
-    "payload": {
-      "tool": "fit_sim_params",
-      "args": {
-        "db": "D:\\BIOS\\data\\tiny_replay_tmp.db"
-      }
-    }
-  },
-  {
-    "type": "tool_result",
-    "node": "counterfactual_verifier",
-    "payload": {
-      "tool": "fit_sim_params",
-      "result": {
-        "pool_size": 20,
-        "arrival_rate_per_s": 0.02,
-        "leak_prob": 0.25,
-        "mean_service_ms": 55.0,
-        "acquire_timeout_ms": 5000,
-        "gateway_timeout_ms": 3000,
-        "retry_max": 3,
-        "window_s": 210,
-        "seed": 42
-      }
-    }
-  },
-  {
-    "type": "tool_call",
-    "node": "counterfactual_verifier",
-    "payload": {
-      "tool": "run_counterfactual",
-      "args": {
-        "intervention": "fix_leak",
-        "n_runs": 200
-      }
-    }
-  },
-  {
-    "type": "tool_result",
-    "node": "counterfactual_verifier",
-    "payload": {
-      "intervention": "fix_leak",
-      "result": {
-        "intervention": "fix_leak",
-        "baseline_failure_prob": 0.0,
-        "intervened_failure_prob": 0.0,
-        "ci95": [
-          0.0,
-          0.0
-        ],
-        "n_runs": 200,
-        "model_assumptions": [
-          "Token validator error path fixed to guarantee connection release",
-          "Elimination of connection leak reduces pool exhaustion probability to zero",
-          "Steady-state request arrival distribution matches observed telemetry"
-        ]
-      }
-    }
-  },
-  {
-    "type": "tool_call",
-    "node": "counterfactual_verifier",
-    "payload": {
-      "tool": "run_counterfactual",
-      "args": {
-        "intervention": "pool_size=50",
-        "n_runs": 200
-      }
-    }
-  },
-  {
-    "type": "tool_result",
-    "node": "counterfactual_verifier",
-    "payload": {
-      "intervention": "pool_size=50",
-      "result": {
-        "intervention": "pool_size=50",
-        "baseline_failure_prob": 0.0,
-        "intervened_failure_prob": 0.0,
-        "ci95": [
-          0.0,
-          0.0
-        ],
-        "n_runs": 200,
-        "model_assumptions": [
-          "Connection pool size increased to 50",
-          "Delays connection pool exhaustion under persistent leak but does not prevent exhaustion",
-          "Downstream database supports increased concurrent connections"
-        ]
-      }
-    }
-  },
-  {
-    "type": "tool_call",
-    "node": "counterfactual_verifier",
-    "payload": {
-      "tool": "run_counterfactual",
-      "args": {
-        "intervention": "no_retries",
-        "n_runs": 200
-      }
-    }
-  },
-  {
-    "type": "tool_result",
-    "node": "counterfactual_verifier",
-    "payload": {
-      "intervention": "no_retries",
-      "result": {
-        "intervention": "no_retries",
-        "baseline_failure_prob": 0.0,
-        "intervened_failure_prob": 0.0,
-        "ci95": [
-          0.0,
-          0.0
-        ],
-        "n_runs": 200,
-        "model_assumptions": [
-          "Client retry backoff eliminated (retries = 0) upon 504 timeout",
-          "Failure onset and underlying connection exhaustion remain unchanged; retries act as amplifier",
-          "Leaked connections in auth-service pool remain unreleased"
-        ]
-      }
-    }
-  },
-  {
-    "type": "state",
-    "node": "report_synthesizer",
-    "payload": {
-      "status": "synthesizing_report"
-    }
-  },
-  {
-    "type": "report",
-    "node": "report_synthesizer",
-    "payload": {
-      "schema_version": "1.0",
-      "timeline_events": [
-        {
-          "order": 1,
-          "t_corrected_ms": 1700000000000,
-          "service": "db-pool",
-          "description": "Baseline connection pool utilization is healthy at 2.0 active connections.",
-          "claim_type": "verified_fact",
-          "evidence": [
-            {
-              "kind": "metric",
-              "id": "db_pool.active_connections@1700000000000",
-              "note": "Initial connection pool baseline reading"
-            }
-          ]
-        },
-        {
-          "order": 2,
-          "t_corrected_ms": 1700000090000,
-          "service": "db-pool",
-          "description": "Connection pool approaches saturation ceiling as active connections surge.",
-          "claim_type": "verified_fact",
-          "evidence": [
-            {
-              "kind": "metric",
-              "id": "db_pool.active_connections@1700000090000",
-              "note": "Anomalous active connections onset / saturation"
-            }
-          ]
-        },
-        {
-          "order": 3,
-          "t_corrected_ms": 1700000095000,
-          "service": "gateway",
-          "description": "Gateway returns HTTP 504 timeouts to citizens due to auth-service checkout delays.",
-          "claim_type": "verified_fact",
-          "evidence": [
-            {
-              "kind": "span",
-              "id": "span-gw-3",
-              "note": "First observed HTTP 504 span on gateway at t=1700000095000"
-            }
-          ]
-        },
-        {
-          "order": 4,
-          "t_corrected_ms": 1700000126000,
-          "service": "frontend",
-          "description": "Frontend CPU spikes due to client retry cascade amplifying request load.",
-          "claim_type": "verified_fact",
-          "evidence": [
-            {
-              "kind": "log",
-              "id": "log-fe-1",
-              "note": "Client retry log: Gateway 504 received, initiating exponential backoff retry storm"
-            }
-          ]
-        },
-        {
-          "order": 5,
-          "t_corrected_ms": 1700000211050,
-          "service": "auth-service",
-          "description": "Auth-service unhandled error path skips connection release in token validator.",
-          "claim_type": "inference",
-          "evidence": [
-            {
-              "kind": "log",
-              "id": "log-auth-5",
-              "note": "Log confirms unhandled exception skipped release: Connection leak: unhandled exception in token validator skipped release()"
-            }
-          ]
-        }
-      ],
-      "hypotheses_evaluated": [
-        {
-          "id": "H1",
-          "statement": "auth-service leaks DB connections on error path, exhausting pool and causing gateway 504 timeouts.",
-          "confidence": 0.9873,
-          "verdict": "root_cause",
-          "supporting": [
-            {
-              "kind": "metric",
-              "id": "db_pool.active_connections@1700000090000",
-              "note": "Peak value 20.00 observed at t=1700000090000"
-            },
-            {
-              "kind": "log",
-              "id": "log-auth-5",
-              "note": "Connection leak: unhandled exception in token validator skipped release()"
-            },
-            {
-              "kind": "span",
-              "id": "span-gw-3",
-              "note": "First gateway 504 timeout span (GET /auth/verify) at t=1700000095000"
-            }
+        "edges": [
+          [
+            "gateway",
+            "auth-service"
           ],
-          "refuting": [],
-          "counterfactual": {
-            "intervention": "fix_leak",
-            "baseline_failure_prob": 0.0,
-            "intervened_failure_prob": 0.0,
-            "ci95": [
-              0.0,
-              0.0
-            ],
-            "n_runs": 200,
-            "model_assumptions": [
-              "Token validator error path fixed to guarantee connection release",
-              "Elimination of connection leak reduces pool exhaustion probability to zero",
-              "Steady-state request arrival distribution matches observed telemetry"
+          [
+            "frontend",
+            "gateway"
+          ],
+          [
+            "auth-service",
+            "db-pool"
+          ]
+        ],
+        "frontier": "auth-service -> db-pool"
+      }
+    },
+    {
+      "type": "state",
+      "node": "hypothesis_generator",
+      "payload": {
+        "status": "evaluating_hypotheses"
+      }
+    },
+    {
+      "type": "hypothesis",
+      "node": "hypothesis_generator",
+      "payload": {
+        "id": "H1",
+        "statement": "auth-service leaks resource connections on error path, exhausting pool and causing gateway timeout cascade.",
+        "confidence": 0.9873,
+        "verdict": "root_cause",
+        "supporting": [
+          {
+            "kind": "metric",
+            "id": "db_pool.active_connections@1700000090000",
+            "note": "Peak value 20.00 observed at t=1700000090000"
+          },
+          {
+            "kind": "log",
+            "id": "log-auth-5",
+            "note": "Connection leak: unhandled exception in token validator skipped release()"
+          },
+          {
+            "kind": "span",
+            "id": "span-gw-3",
+            "note": "First error span on gateway (GET /auth/verify) at t=1700000095000"
+          },
+          {
+            "kind": "span",
+            "id": "span-db-1",
+            "note": "Baseline healthy downstream span on db-pool (acquire_connection) at t=1700000001020"
+          }
+        ],
+        "refuting": [],
+        "counterfactual": null
+      }
+    },
+    {
+      "type": "hypothesis",
+      "node": "hypothesis_generator",
+      "payload": {
+        "id": "H2",
+        "statement": "frontend retry storm caused downstream server overload and gateway timeouts.",
+        "confidence": 0.01,
+        "verdict": "contributing_factor",
+        "supporting": [
+          {
+            "kind": "log",
+            "id": "log-fe-1",
+            "note": "Gateway 504 received, initiating exponential backoff retry storm"
+          }
+        ],
+        "refuting": [
+          {
+            "kind": "metric",
+            "id": "gateway.error_rate_5xx@1700000000000",
+            "note": "Baseline reading at t=1700000000000"
+          }
+        ],
+        "counterfactual": null
+      }
+    },
+    {
+      "type": "hypothesis",
+      "node": "hypothesis_generator",
+      "payload": {
+        "id": "H3",
+        "statement": "Slow queries on db-pool saturated connection pool and caused timeout cascade.",
+        "confidence": 0.01,
+        "verdict": "rejected",
+        "supporting": [],
+        "refuting": [],
+        "counterfactual": null
+      }
+    },
+    {
+      "type": "hypothesis",
+      "node": "hypothesis_generator",
+      "payload": {
+        "id": "H4",
+        "statement": "gateway timeout misconfiguration prematurely aborted healthy downstream requests.",
+        "confidence": 0.01,
+        "verdict": "rejected",
+        "supporting": [],
+        "refuting": [
+          {
+            "kind": "metric",
+            "id": "db_pool.active_connections@1700000090000",
+            "note": "Peak value 20.00 observed at t=1700000090000"
+          }
+        ],
+        "counterfactual": null
+      }
+    },
+    {
+      "type": "state",
+      "node": "counterfactual_verifier",
+      "payload": {
+        "status": "running_simulation"
+      }
+    },
+    {
+      "type": "tool_call",
+      "node": "counterfactual_verifier",
+      "payload": {
+        "tool": "fit_sim_params",
+        "args": {
+          "db": "D:\\BIOS\\data\\tiny_replay_tmp.db"
+        }
+      }
+    },
+    {
+      "type": "tool_result",
+      "node": "counterfactual_verifier",
+      "payload": {
+        "tool": "fit_sim_params",
+        "result": {
+          "pool_size": 20,
+          "arrival_rate_per_s": 0.02,
+          "leak_prob": 0.25,
+          "mean_service_ms": 67.5,
+          "acquire_timeout_ms": 5000,
+          "gateway_timeout_ms": 3000,
+          "retry_max": 3,
+          "window_s": 210,
+          "seed": 42
+        }
+      }
+    },
+    {
+      "type": "tool_call",
+      "node": "counterfactual_verifier",
+      "payload": {
+        "tool": "run_counterfactual",
+        "args": {
+          "intervention": "fix_leak",
+          "n_runs": 200
+        }
+      }
+    },
+    {
+      "type": "tool_result",
+      "node": "counterfactual_verifier",
+      "payload": {
+        "intervention": "fix_leak",
+        "result": {
+          "intervention": "fix_leak",
+          "baseline_failure_prob": 0.0,
+          "intervened_failure_prob": 0.0,
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "n_runs": 200,
+          "model_assumptions": [
+            "Token validator error path fixed to guarantee connection release",
+            "Elimination of connection leak reduces pool exhaustion probability to zero",
+            "Steady-state request arrival distribution matches observed telemetry"
+          ]
+        }
+      }
+    },
+    {
+      "type": "tool_call",
+      "node": "counterfactual_verifier",
+      "payload": {
+        "tool": "run_counterfactual",
+        "args": {
+          "intervention": "pool_size=50",
+          "n_runs": 200
+        }
+      }
+    },
+    {
+      "type": "tool_result",
+      "node": "counterfactual_verifier",
+      "payload": {
+        "intervention": "pool_size=50",
+        "result": {
+          "intervention": "pool_size=50",
+          "baseline_failure_prob": 0.0,
+          "intervened_failure_prob": 0.0,
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "n_runs": 200,
+          "model_assumptions": [
+            "Connection pool size increased to 50",
+            "Delays connection pool exhaustion under persistent leak but does not prevent exhaustion",
+            "Downstream database supports increased concurrent connections"
+          ]
+        }
+      }
+    },
+    {
+      "type": "tool_call",
+      "node": "counterfactual_verifier",
+      "payload": {
+        "tool": "run_counterfactual",
+        "args": {
+          "intervention": "no_retries",
+          "n_runs": 200
+        }
+      }
+    },
+    {
+      "type": "tool_result",
+      "node": "counterfactual_verifier",
+      "payload": {
+        "intervention": "no_retries",
+        "result": {
+          "intervention": "no_retries",
+          "baseline_failure_prob": 0.0,
+          "intervened_failure_prob": 0.0,
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "n_runs": 200,
+          "model_assumptions": [
+            "Client retry backoff eliminated (retries = 0) upon 504 timeout",
+            "Failure onset and underlying connection exhaustion remain unchanged; retries act as amplifier",
+            "Leaked connections in auth-service pool remain unreleased"
+          ]
+        }
+      }
+    },
+    {
+      "type": "state",
+      "node": "report_synthesizer",
+      "payload": {
+        "status": "synthesizing_report"
+      }
+    },
+    {
+      "type": "report",
+      "node": "report_synthesizer",
+      "payload": {
+        "schema_version": "1.0",
+        "incident_detected": true,
+        "timeline_events": [
+          {
+            "order": 1,
+            "t_corrected_ms": 1700000000000,
+            "service": "auth-service",
+            "description": "Anomalous metric onset detected on auth-service for metric auth.latency_p99.",
+            "claim_type": "verified_fact",
+            "evidence": [
+              {
+                "kind": "metric",
+                "id": "auth.latency_p99@1700000012000",
+                "note": "Anomalous onset identified at corrected t=1700000000000"
+              }
+            ]
+          },
+          {
+            "order": 2,
+            "t_corrected_ms": 1700000000000,
+            "service": "db-pool",
+            "description": "Anomalous metric onset detected on db-pool for metric db_pool.wait_queue_len.",
+            "claim_type": "verified_fact",
+            "evidence": [
+              {
+                "kind": "metric",
+                "id": "db_pool.wait_queue_len@1700000000000",
+                "note": "Anomalous onset identified at corrected t=1700000000000"
+              }
+            ]
+          },
+          {
+            "order": 3,
+            "t_corrected_ms": 1700000095000,
+            "service": "gateway",
+            "description": "First observed HTTP 504 error span (GET /auth/verify) on service gateway.",
+            "claim_type": "verified_fact",
+            "evidence": [
+              {
+                "kind": "span",
+                "id": "span-gw-3",
+                "note": "First observed error span on gateway (status 504)"
+              }
+            ]
+          },
+          {
+            "order": 4,
+            "t_corrected_ms": 1700000098005,
+            "service": "gateway",
+            "description": "Error log on service gateway: Upstream auth-service timed out after 3000ms, returning 504.",
+            "claim_type": "verified_fact",
+            "evidence": [
+              {
+                "kind": "log",
+                "id": "log-gw-3",
+                "note": "Log: Upstream auth-service timed out after 3000ms, returning 504"
+              }
             ]
           }
-        },
-        {
-          "id": "H2",
-          "statement": "Frontend retry storm caused downstream server overload and gateway timeouts.",
-          "confidence": 0.01,
-          "verdict": "contributing_factor",
-          "supporting": [
-            {
-              "kind": "log",
-              "id": "log-fe-1",
-              "note": "Gateway 504 received, initiating exponential backoff retry storm"
-            }
-          ],
-          "refuting": [
-            {
-              "kind": "metric",
-              "id": "gateway.error_rate_5xx@1700000000000",
-              "note": "Baseline reading at t=1700000000000"
-            }
-          ],
-          "counterfactual": {
-            "intervention": "no_retries",
-            "baseline_failure_prob": 0.0,
-            "intervened_failure_prob": 0.0,
-            "ci95": [
-              0.0,
-              0.0
+        ],
+        "hypotheses_evaluated": [
+          {
+            "id": "H1",
+            "statement": "auth-service leaks resource connections on error path, exhausting pool and causing gateway timeout cascade.",
+            "confidence": 0.9873,
+            "verdict": "root_cause",
+            "supporting": [
+              {
+                "kind": "metric",
+                "id": "db_pool.active_connections@1700000090000",
+                "note": "Peak value 20.00 observed at t=1700000090000"
+              },
+              {
+                "kind": "log",
+                "id": "log-auth-5",
+                "note": "Connection leak: unhandled exception in token validator skipped release()"
+              },
+              {
+                "kind": "span",
+                "id": "span-gw-3",
+                "note": "First error span on gateway (GET /auth/verify) at t=1700000095000"
+              },
+              {
+                "kind": "span",
+                "id": "span-db-1",
+                "note": "Baseline healthy downstream span on db-pool (acquire_connection) at t=1700000001020"
+              }
             ],
-            "n_runs": 200,
-            "model_assumptions": [
-              "Client retry backoff eliminated (retries = 0) upon 504 timeout",
-              "Failure onset and underlying connection exhaustion remain unchanged; retries act as amplifier",
-              "Leaked connections in auth-service pool remain unreleased"
-            ]
-          }
-        },
-        {
-          "id": "H3",
-          "statement": "Slow database queries saturated connection pool and caused timeout cascade.",
-          "confidence": 0.01,
-          "verdict": "rejected",
-          "supporting": [],
-          "refuting": [],
-          "counterfactual": null
-        },
-        {
-          "id": "H4",
-          "statement": "Gateway timeout misconfiguration prematurely aborted healthy downstream requests.",
-          "confidence": 0.01,
-          "verdict": "rejected",
-          "supporting": [],
-          "refuting": [
-            {
-              "kind": "metric",
-              "id": "db_pool.active_connections@1700000090000",
-              "note": "Peak value 20.00 observed at t=1700000090000"
+            "refuting": [],
+            "counterfactual": {
+              "intervention": "fix_leak",
+              "baseline_failure_prob": 0.0,
+              "intervened_failure_prob": 0.0,
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "n_runs": 200,
+              "model_assumptions": [
+                "Token validator error path fixed to guarantee connection release",
+                "Elimination of connection leak reduces pool exhaustion probability to zero",
+                "Steady-state request arrival distribution matches observed telemetry"
+              ]
             }
-          ],
-          "counterfactual": null
-        }
-      ],
-      "evidence_pointers": [
-        {
-          "kind": "metric",
-          "id": "db_pool.active_connections@1700000000000",
-          "note": "Initial connection pool baseline reading"
+          },
+          {
+            "id": "H2",
+            "statement": "frontend retry storm caused downstream server overload and gateway timeouts.",
+            "confidence": 0.01,
+            "verdict": "contributing_factor",
+            "supporting": [
+              {
+                "kind": "log",
+                "id": "log-fe-1",
+                "note": "Gateway 504 received, initiating exponential backoff retry storm"
+              }
+            ],
+            "refuting": [
+              {
+                "kind": "metric",
+                "id": "gateway.error_rate_5xx@1700000000000",
+                "note": "Baseline reading at t=1700000000000"
+              }
+            ],
+            "counterfactual": {
+              "intervention": "no_retries",
+              "baseline_failure_prob": 0.0,
+              "intervened_failure_prob": 0.0,
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "n_runs": 200,
+              "model_assumptions": [
+                "Client retry backoff eliminated (retries = 0) upon 504 timeout",
+                "Failure onset and underlying connection exhaustion remain unchanged; retries act as amplifier",
+                "Leaked connections in auth-service pool remain unreleased"
+              ]
+            }
+          },
+          {
+            "id": "H3",
+            "statement": "Slow queries on db-pool saturated connection pool and caused timeout cascade.",
+            "confidence": 0.01,
+            "verdict": "rejected",
+            "supporting": [],
+            "refuting": [],
+            "counterfactual": null
+          },
+          {
+            "id": "H4",
+            "statement": "gateway timeout misconfiguration prematurely aborted healthy downstream requests.",
+            "confidence": 0.01,
+            "verdict": "rejected",
+            "supporting": [],
+            "refuting": [
+              {
+                "kind": "metric",
+                "id": "db_pool.active_connections@1700000090000",
+                "note": "Peak value 20.00 observed at t=1700000090000"
+              }
+            ],
+            "counterfactual": null
+          }
+        ],
+        "evidence_pointers": [
+          {
+            "kind": "metric",
+            "id": "auth.latency_p99@1700000012000",
+            "note": "Anomalous onset identified at corrected t=1700000000000"
+          },
+          {
+            "kind": "metric",
+            "id": "db_pool.wait_queue_len@1700000000000",
+            "note": "Anomalous onset identified at corrected t=1700000000000"
+          },
+          {
+            "kind": "span",
+            "id": "span-gw-3",
+            "note": "First observed error span on gateway (status 504)"
+          },
+          {
+            "kind": "log",
+            "id": "log-gw-3",
+            "note": "Log: Upstream auth-service timed out after 3000ms, returning 504"
+          },
+          {
+            "kind": "metric",
+            "id": "db_pool.active_connections@1700000090000",
+            "note": "Peak value 20.00 observed at t=1700000090000"
+          },
+          {
+            "kind": "log",
+            "id": "log-auth-5",
+            "note": "Connection leak: unhandled exception in token validator skipped release()"
+          },
+          {
+            "kind": "span",
+            "id": "span-db-1",
+            "note": "Baseline healthy downstream span on db-pool (acquire_connection) at t=1700000001020"
+          },
+          {
+            "kind": "log",
+            "id": "log-fe-1",
+            "note": "Gateway 504 received, initiating exponential backoff retry storm"
+          },
+          {
+            "kind": "metric",
+            "id": "gateway.error_rate_5xx@1700000000000",
+            "note": "Baseline reading at t=1700000000000"
+          }
+        ],
+        "estimated_clock_offsets_s": {
+          "gateway": 0.0,
+          "db-pool": 0.0,
+          "auth-service": 12.0
         },
-        {
-          "kind": "metric",
-          "id": "db_pool.active_connections@1700000090000",
-          "note": "Anomalous active connections onset / saturation"
-        },
-        {
-          "kind": "span",
-          "id": "span-gw-3",
-          "note": "First observed HTTP 504 span on gateway at t=1700000095000"
-        },
-        {
-          "kind": "log",
-          "id": "log-fe-1",
-          "note": "Client retry log: Gateway 504 received, initiating exponential backoff retry storm"
-        },
-        {
-          "kind": "log",
-          "id": "log-auth-5",
-          "note": "Log confirms unhandled exception skipped release: Connection leak: unhandled exception in token validator skipped release()"
-        },
-        {
-          "kind": "metric",
-          "id": "gateway.error_rate_5xx@1700000000000",
-          "note": "Baseline reading at t=1700000000000"
-        }
-      ],
-      "estimated_clock_offsets_s": {
-        "db-pool": 0.0,
-        "gateway": 0.0,
-        "auth-service": 12.0
-      },
-      "remediation": [
-        "Set a sane max_pool_size tuned to database connection capacity.",
-        "Ensure database connections are released in try-finally or context managers across all exit paths.",
-        "Implement connection pool leak detection threshold and watchdog alerts on saturation.",
-        "Configure client retries with exponential backoff and randomized jitter to prevent retry storms.",
-        "Introduce gateway circuit breaker to shed load when downstream auth and database dependencies timeout."
-      ]
+        "remediation": [
+          "Set a sane max_pool_size tuned to database connection capacity.",
+          "Ensure database connections are released in try-finally or context managers across all exit paths.",
+          "Implement connection pool leak detection threshold and watchdog alerts on saturation.",
+          "Configure client retries with exponential backoff and randomized jitter to prevent retry storms.",
+          "Introduce gateway circuit breaker to shed load when downstream auth and database dependencies timeout."
+        ],
+        "data_quality": {},
+        "limitations": [],
+        "investigation_seconds": null
+      }
     }
-  }
-]
+  ]
+}

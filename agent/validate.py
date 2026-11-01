@@ -5,7 +5,6 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from contracts.constants import METRIC_SOURCES
 from contracts.models import EvidencePointer, IncidentReport, TimelineEvent
 from tools.skew import estimate_clock_offsets
 
@@ -73,7 +72,7 @@ def validate_evidence_pointer(
                 offsets = estimate_clock_offsets(conn)
                 cur.execute("SELECT service FROM metrics WHERE metric = ? LIMIT 1", (metric_name,))
                 s_row = cur.fetchone()
-                svc = s_row[0] if s_row else METRIC_SOURCES.get(metric_name)
+                svc = s_row[0] if s_row else None
                 corr_ms = int(offsets.get(svc, 0.0) * 1000) if svc else 0
                 if corr_ms != 0:
                     cur.execute(
@@ -142,11 +141,13 @@ def has_telemetry_tables(db: str | Path | sqlite3.Connection | None) -> bool:
 def validate_timeline_events(
     events: list[TimelineEvent],
     db: str | Path | sqlite3.Connection | None = None,
+    allow_empty: bool = False,
 ) -> list[str]:
     """Validate chronological ordering and evidence resolution for timeline events."""
     issues = []
     if not events:
-        issues.append("Report must include reconstructed timeline events.")
+        if not allow_empty:
+            issues.append("Report must include reconstructed timeline events.")
         return issues
 
     check_db = has_telemetry_tables(db)
@@ -185,13 +186,16 @@ def validate_incident_report(
     """
     issues = []
 
-    # 1. Root cause verification
+    # 1. Root cause verification (required only if incident detected and no limitations)
     root_causes = [h for h in report.hypotheses_evaluated if h.verdict == "root_cause"]
-    if not root_causes:
+    if not root_causes and report.incident_detected and not report.limitations:
         issues.append("Report must evaluate and establish at least one root_cause.")
 
-    # 2. Timeline validation
-    issues.extend(validate_timeline_events(report.timeline_events, db=db))
+    # 2. Timeline validation (empty allowed if incident not detected or limitations present)
+    allow_empty_timeline = not report.incident_detected or bool(report.limitations)
+    issues.extend(
+        validate_timeline_events(report.timeline_events, db=db, allow_empty=allow_empty_timeline)
+    )
 
     # 3. Evidence pointers verification against DB
     check_db = has_telemetry_tables(db)

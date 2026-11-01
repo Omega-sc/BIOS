@@ -10,7 +10,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from agent.runner import run_investigation  # noqa: E402
+from agent.runner import compute_db_content_hash, run_investigation  # noqa: E402
 from ingest.load_jsonl import load_telemetry  # noqa: E402
 
 REPLAY_DIR = ROOT_DIR / "fixtures" / "replay"
@@ -19,27 +19,37 @@ TINY_JSONL = ROOT_DIR / "fixtures" / "tiny_telemetry.jsonl"
 
 
 def record_all_replays() -> None:
-    """Record replay event streams for primary and tiny telemetry."""
+    """Record replay event streams for primary and tiny telemetry with content hashing."""
     REPLAY_DIR.mkdir(parents=True, exist_ok=True)
 
     # 1. Primary incident telemetry replay
     print(f"Recording primary incident replay from {INCIDENT_DB}...")
+    inc_hash = compute_db_content_hash(INCIDENT_DB)
     events_inc = [e.model_dump() for e in run_investigation(str(INCIDENT_DB), mode="scripted")]
+    inc_payload = {
+        "db_content_hash": inc_hash,
+        "events": events_inc,
+    }
     inc_file = REPLAY_DIR / "incident_db_replay.json"
     with open(inc_file, "w", encoding="utf-8") as f:
-        json.dump(events_inc, f, indent=2)
-    print(f"Saved {len(events_inc)} events to {inc_file}")
+        json.dump(inc_payload, f, indent=2)
+    print(f"Saved {len(events_inc)} events (hash {inc_hash[:12]}...) to {inc_file}")
 
     # 2. Tiny telemetry replay
     print(f"Recording tiny telemetry replay from {TINY_JSONL}...")
     tmp_db = ROOT_DIR / "data" / "tiny_replay_tmp.db"
     try:
         load_telemetry(TINY_JSONL, tmp_db)
+        tiny_hash = compute_db_content_hash(tmp_db)
         events_tiny = [e.model_dump() for e in run_investigation(str(tmp_db), mode="scripted")]
+        tiny_payload = {
+            "db_content_hash": tiny_hash,
+            "events": events_tiny,
+        }
         tiny_file = REPLAY_DIR / "tiny_telemetry_replay.json"
         with open(tiny_file, "w", encoding="utf-8") as f:
-            json.dump(events_tiny, f, indent=2)
-        print(f"Saved {len(events_tiny)} events to {tiny_file}")
+            json.dump(tiny_payload, f, indent=2)
+        print(f"Saved {len(events_tiny)} events (hash {tiny_hash[:12]}...) to {tiny_file}")
     finally:
         if tmp_db.exists():
             tmp_db.unlink()

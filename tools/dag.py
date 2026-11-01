@@ -45,16 +45,40 @@ def build_dependency_dag(db: str | Path | sqlite3.Connection) -> nx.DiGraph:
 
         cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='spans'")
         if not cur.fetchone():
-            raise sqlite3.OperationalError("spans table does not exist")
+            return dag
 
-        # 1. Metric onsets per service
+        # 1. Discover all services from spans, metrics, and logs
+        all_services: set[str] = set()
+        cur.execute("SELECT DISTINCT service FROM spans")
+        for r in cur.fetchall():
+            if r[0]:
+                all_services.add(r[0])
+
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='metrics'")
+        if cur.fetchone():
+            cur.execute("SELECT DISTINCT service FROM metrics")
+            for r in cur.fetchall():
+                if r[0]:
+                    all_services.add(r[0])
+
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='logs'")
+        if cur.fetchone():
+            cur.execute("SELECT DISTINCT service FROM logs")
+            for r in cur.fetchall():
+                if r[0]:
+                    all_services.add(r[0])
+
+        if not all_services:
+            return dag
+
+        # 2. Metric onsets per service
         onsets = rank_metric_onsets(conn)
         service_onsets: dict[str, int | None] = {}
         for o in onsets:
             if o.service not in service_onsets or service_onsets[o.service] is None:
                 service_onsets[o.service] = o.onset_corrected_ms
 
-        # 2. Node statistics from spans
+        # 3. Node statistics from spans
         cur.execute(
             """
             SELECT service, COUNT(*),
@@ -63,40 +87,19 @@ def build_dependency_dag(db: str | Path | sqlite3.Connection) -> nx.DiGraph:
             GROUP BY service
             """
         )
-        service_stats = cur.fetchall()
+        service_stats = dict((r[0], (r[1], r[2])) for r in cur.fetchall())
 
-        gw_error_rate = 0.0
-        gw_mean_dur = 50.0
-        gw_count = 0
-
-        for svc, count, errs in service_stats:
-            err_rate = round(float(errs) / max(1, count), 4)
+        for svc in all_services:
+            count, errs = service_stats.get(svc, (0, 0))
+            err_rate = round(float(errs) / max(1, count), 4) if count > 0 else 0.0
             dag.add_node(
                 svc,
                 error_rate=err_rate,
                 metric_onset=service_onsets.get(svc),
                 span_count=count,
             )
-            if svc == "gateway":
-                gw_error_rate = err_rate
-                gw_count = count
 
-        # Check gateway root span duration
-        cur.execute("SELECT AVG(end_ms - start_ms) FROM spans WHERE service = 'gateway'")
-        row = cur.fetchone()
-        if row and row[0] is not None:
-            gw_mean_dur = round(float(row[0]), 2)
-
-        # Ensure frontend node exists (frontend -> gateway)
-        if "frontend" not in dag:
-            dag.add_node(
-                "frontend",
-                error_rate=gw_error_rate,
-                metric_onset=service_onsets.get("frontend"),
-                span_count=gw_count,
-            )
-
-        # 3. Query cross-service parent-child span edges
+        # 4. Query cross-service parent-child span edges
         cur.execute(
             """
             SELECT p.service, c.service,
@@ -122,66 +125,44 @@ def build_dependency_dag(db: str | Path | sqlite3.Connection) -> nx.DiGraph:
                 error_propagation_fraction=prop_fraction,
             )
 
-        # Add frontend -> gateway edge
-        dag.add_edge(
-            "frontend",
-            "gateway",
-            call_count=gw_count or 100,
-            mean_latency=gw_mean_dur,
-            error_propagation_fraction=gw_error_rate,
+        # 5. Connect upstream client services (services with 0 spans but present in metrics/logs)
+        cur.execute(
+            "SELECT service, COUNT(*) FROM spans WHERE parent_span_id IS NULL GROUP BY service ORDER BY COUNT(*) DESC LIMIT 1"
         )
+        root_row = cur.fetchone()
+        root_svc = root_row[0] if root_row else None
+        root_count = root_row[1] if root_row else 0
 
-        # 4. Attach diagnostic metric peaks and log signatures to dag.graph
-        try:
+        if root_svc:
+            root_stats = service_stats.get(root_svc, (0, 0))
+            root_err_rate = (
+                round(float(root_stats[1]) / max(1, root_stats[0]), 4) if root_stats[0] > 0 else 0.0
+            )
             cur.execute(
-                "SELECT metric, MAX(value) FROM metrics WHERE metric IN ('db_pool.active_connections', 'db_pool.queries_in_flight', 'gateway.error_rate_5xx', 'frontend.cpu_pct') GROUP BY metric"
+                "SELECT AVG(end_ms - start_ms) FROM spans WHERE service = ? AND parent_span_id IS NULL",
+                (root_svc,),
             )
-            peaks = dict(cur.fetchall())
-            dag.graph["active_connections_peak"] = float(
-                peaks.get("db_pool.active_connections", 0.0)
+            dur_row = cur.fetchone()
+            root_mean_dur = (
+                round(float(dur_row[0]), 2) if dur_row and dur_row[0] is not None else 50.0
             )
-            dag.graph["queries_in_flight_peak"] = float(peaks.get("db_pool.queries_in_flight", 0.0))
-            dag.graph["gateway_5xx_peak"] = float(peaks.get("gateway.error_rate_5xx", 0.0))
-            dag.graph["frontend_cpu_peak"] = float(peaks.get("frontend.cpu_pct", 0.0))
-        except Exception:
-            pass
 
-        try:
-            cur.execute(
-                "SELECT COUNT(*) FROM logs WHERE service = 'auth-service' AND (message LIKE '%skipped release%' OR message LIKE '%leak%')"
-            )
-            leak_row = cur.fetchone()
-            dag.graph["auth_leak_logs"] = leak_row[0] if leak_row else 0
-        except Exception:
-            pass
+            client_services = [s for s in all_services if service_stats.get(s, (0, 0))[0] == 0]
+            for client in client_services:
+                dag.nodes[client]["error_rate"] = root_err_rate
+                dag.nodes[client]["span_count"] = root_count
+                dag.add_edge(
+                    client,
+                    root_svc,
+                    call_count=root_count or 100,
+                    mean_latency=root_mean_dur,
+                    error_propagation_fraction=root_err_rate,
+                )
 
         return dag
 
     except Exception:
-        # Graceful fallback DAG
-        fallback = nx.DiGraph()
-        fallback.add_node("frontend", error_rate=0.0, metric_onset=None, span_count=0)
-        fallback.add_node("gateway", error_rate=0.0, metric_onset=None, span_count=0)
-        fallback.add_node("auth-service", error_rate=0.0, metric_onset=None, span_count=0)
-        fallback.add_node("db-pool", error_rate=0.0, metric_onset=None, span_count=0)
-        fallback.add_edge(
-            "frontend", "gateway", call_count=100, mean_latency=50.0, error_propagation_fraction=0.0
-        )
-        fallback.add_edge(
-            "gateway",
-            "auth-service",
-            call_count=100,
-            mean_latency=45.0,
-            error_propagation_fraction=0.0,
-        )
-        fallback.add_edge(
-            "auth-service",
-            "db-pool",
-            call_count=100,
-            mean_latency=20.0,
-            error_propagation_fraction=0.0,
-        )
-        return fallback
+        return nx.DiGraph()
     finally:
         if should_close:
             conn.close()
@@ -197,15 +178,11 @@ def to_node_link_json(dag: nx.DiGraph) -> str:
 def failure_frontier(
     dag: nx.DiGraph | dict | None = None,
     db: str | Path | sqlite3.Connection | None = None,
-) -> str:
-    """Identify the earliest failing service boundary along the dependency path.
+) -> str | None:
+    """Identify the earliest failing service boundary or deepest failing node in the DAG.
 
-    Uses the leak signature (active_connections elevated while queries_in_flight flat,
-    acquire > release) to pinpoint auth-service connection pool as the failure frontier
-    rather than the downstream database.
-
-    Returns:
-        str: Service boundary description, e.g. "auth-service -> db-pool".
+    Computed from node/edge attributes: deepest failing node whose dependencies are healthy,
+    or the boundary edge with the earliest onset. Returns None if healthy.
     """
     if dag is None and db is not None:
         dag = build_dependency_dag(db)
@@ -214,74 +191,79 @@ def failure_frontier(
     if isinstance(dag, dict):
         dag = nx.node_link_graph(dag, edges="links")
 
-    if dag is None:
-        return "auth-service -> db-pool"
+    if dag is None or len(dag.nodes) == 0:
+        return None
 
-    # Query metrics and logs directly if db connection provided or graph lacks data
-    active_peak = dag.graph.get("active_connections_peak")
-    qif_peak = dag.graph.get("queries_in_flight_peak")
-    auth_leak_logs = dag.graph.get("auth_leak_logs", 0)
+    # 1. Identify failing/anomalous nodes based on error_rate or anomalous metric onset
+    failing_nodes: dict[str, tuple[float, int | None]] = {}
+    for n in dag.nodes:
+        err_rate = dag.nodes[n].get("error_rate", 0.0)
+        onset = dag.nodes[n].get("metric_onset")
+        if err_rate > 0.05 or onset is not None:
+            failing_nodes[n] = (err_rate, onset)
 
-    if (active_peak is None or qif_peak is None) and db is not None:
-        try:
-            conn, should_close = _get_connection(db)
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT metric, MAX(value) FROM metrics WHERE metric IN ('db_pool.active_connections', 'db_pool.queries_in_flight') GROUP BY metric"
+    if not failing_nodes:
+        return None
+
+    # 2. Check for upstream client whose metric onset preceded all span errors (e.g. client retry flood)
+    earliest_onset_node = None
+    earliest_onset_val = None
+    for n, (_, onset) in failing_nodes.items():
+        if onset is not None:
+            if earliest_onset_val is None or onset < earliest_onset_val:
+                earliest_onset_val = onset
+                earliest_onset_node = n
+
+    if earliest_onset_node and dag.in_degree(earliest_onset_node) == 0:
+        succs = list(dag.successors(earliest_onset_node))
+        if succs:
+            succ_onsets = [
+                dag.nodes[s].get("metric_onset")
+                for s in succs
+                if dag.nodes[s].get("metric_onset") is not None
+            ]
+            if succ_onsets and earliest_onset_val < min(succ_onsets):
+                return f"{earliest_onset_node} -> {succs[0]}"
+
+    # 3. Find deepest failing nodes whose dependencies are healthy
+    deepest_failing: list[str] = []
+    for n in failing_nodes:
+        successors = list(dag.successors(n))
+        deps_healthy = all(s not in failing_nodes for s in successors)
+        if deps_healthy:
+            deepest_failing.append(n)
+
+    # If a failing node has outgoing dependencies that are all healthy (e.g. gateway timeout misconfig)
+    for n in deepest_failing:
+        if list(dag.successors(n)):
+            return n
+
+    # For deepest failing leaf nodes (e.g. database or backend service)
+    if deepest_failing:
+        best_leaf = min(
+            deepest_failing,
+            key=lambda n: (
+                failing_nodes[n][1] is None,
+                failing_nodes[n][1] or 0,
+                -failing_nodes[n][0],
+            ),
+        )
+        failing_preds = [p for p in dag.predecessors(best_leaf) if p in failing_nodes]
+        if failing_preds:
+            best_pred = max(
+                failing_preds,
+                key=lambda p: (
+                    dag.get_edge_data(p, best_leaf).get("error_propagation_fraction", 0.0),
+                    dag.get_edge_data(p, best_leaf).get("mean_latency", 0.0),
+                ),
             )
-            peaks = dict(cur.fetchall())
-            active_peak = float(peaks.get("db_pool.active_connections", 0.0))
-            qif_peak = float(peaks.get("db_pool.queries_in_flight", 0.0))
-            cur.execute(
-                "SELECT COUNT(*) FROM logs WHERE service = 'auth-service' AND (message LIKE '%skipped release%' OR message LIKE '%leak%')"
-            )
-            l_row = cur.fetchone()
-            auth_leak_logs = l_row[0] if l_row else 0
-            if should_close:
-                conn.close()
-        except Exception:
-            pass
+            return f"{best_pred} -> {best_leaf}"
+        return best_leaf
 
-    # 1. Connection pool leak signature:
-    # active_connections saturated (>=15) while queries_in_flight flat (<6), or leak logs detected
-    if (
-        active_peak is not None and active_peak >= 15.0 and qif_peak is not None and qif_peak < 6.0
-    ) or auth_leak_logs > 0:
-        return "auth-service -> db-pool"
+    if earliest_onset_node:
+        return earliest_onset_node
 
-    # 2. Slow database signature: queries in flight elevated (>= 8)
-    if qif_peak is not None and qif_peak >= 8.0:
-        return "db-pool"
-
-    # 3. Gateway timeout misconfiguration signature:
-    # Gateway has 504 errors, but auth-service and db-pool are healthy (error rate == 0)
-    gw_err = dag.nodes.get("gateway", {}).get("error_rate", 0.0) if dag.has_node("gateway") else 0.0
-    auth_err = (
-        dag.nodes.get("auth-service", {}).get("error_rate", 0.0)
-        if dag.has_node("auth-service")
-        else 0.0
-    )
-    if gw_err > 0.1 and auth_err < 0.05:
-        return "gateway"
-
-    # 4. Frontend retry storm signature: frontend CPU onset precedes gateway error onset
-    fe_onset = (
-        dag.nodes.get("frontend", {}).get("metric_onset") if dag.has_node("frontend") else None
-    )
-    gw_onset = dag.nodes.get("gateway", {}).get("metric_onset") if dag.has_node("gateway") else None
-    if fe_onset is not None and gw_onset is not None and fe_onset < gw_onset:
-        return "frontend -> gateway"
-
-    # 5. Default frontier based on edge error propagation
-    if dag.has_edge("auth-service", "db-pool"):
-        edge_data = dag.get_edge_data("auth-service", "db-pool")
-        if (
-            edge_data.get("error_propagation_fraction", 0.0) > 0.1
-            or dag.nodes.get("auth-service", {}).get("error_rate", 0.0) > 0.1
-        ):
-            return "auth-service -> db-pool"
-
-    return "auth-service -> db-pool"
+    return None
 
 
 def infer_topology(db: str | Path | sqlite3.Connection) -> nx.DiGraph:

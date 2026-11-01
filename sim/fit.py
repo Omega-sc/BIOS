@@ -10,7 +10,6 @@ import re
 import sqlite3
 from pathlib import Path
 
-from contracts.constants import POOL_MAX
 from contracts.models import SimParams
 
 
@@ -38,10 +37,21 @@ def fit_sim_params(db: str | Path | sqlite3.Connection) -> SimParams:
         if not cur.fetchone():
             raise sqlite3.OperationalError("spans table does not exist")
 
-        # 1. Arrival rate and window from gateway/root spans
+        # 1. Arrival rate and window from root spans
         cur.execute(
-            "SELECT COUNT(*), MIN(start_ms), MAX(start_ms) FROM spans WHERE service = 'gateway'"
+            "SELECT service, COUNT(*) FROM spans WHERE parent_span_id IS NULL GROUP BY service ORDER BY COUNT(*) DESC LIMIT 1"
         )
+        root_row = cur.fetchone()
+        root_service = root_row[0] if root_row else None
+
+        if root_service:
+            cur.execute(
+                "SELECT COUNT(*), MIN(start_ms), MAX(start_ms) FROM spans WHERE service = ?",
+                (root_service,),
+            )
+        else:
+            cur.execute("SELECT COUNT(*), MIN(start_ms), MAX(start_ms) FROM spans")
+
         gw_row = cur.fetchone()
         gw_count = gw_row[0] if gw_row else 0
         min_t = gw_row[1] if gw_row else None
@@ -54,9 +64,9 @@ def fit_sim_params(db: str | Path | sqlite3.Connection) -> SimParams:
             window_s = 480
             arrival_rate = 1.65
 
-        # 2. Mean service time from successful db-pool acquires
+        # 2. Mean service time from successful callee/leaf spans
         cur.execute(
-            "SELECT AVG(end_ms - start_ms) FROM spans WHERE service = 'db-pool' AND status_code = 200"
+            "SELECT AVG(end_ms - start_ms) FROM spans WHERE parent_span_id IS NOT NULL AND (status_code = 200 OR status_code = 0)"
         )
         st_row = cur.fetchone()
         if st_row and st_row[0] is not None:
@@ -64,16 +74,21 @@ def fit_sim_params(db: str | Path | sqlite3.Connection) -> SimParams:
         else:
             mean_service_ms = 40.0
 
-        # 3. Connection pool size
-        pool_size = POOL_MAX
+        # 3. Connection pool size estimated from data (observed plateau/max or span attrs)
+        pool_size = 20
         cur.execute(
-            "SELECT attrs FROM spans WHERE service = 'db-pool' AND attrs LIKE '%pool.size%' LIMIT 1"
+            "SELECT attrs FROM spans WHERE (attrs LIKE '%pool.size%' OR attrs LIKE '%pool%size%') LIMIT 1"
         )
         attr_row = cur.fetchone()
         if attr_row and attr_row[0]:
-            m = re.search(r'"pool\.size":\s*(\d+)', attr_row[0])
+            m = re.search(r'"(?:pool\.size|size)":\s*(\d+)', attr_row[0])
             if m:
                 pool_size = int(m.group(1))
+        else:
+            cur.execute("SELECT MAX(value) FROM metrics WHERE value > 0")
+            max_gauge_row = cur.fetchone()
+            if max_gauge_row and max_gauge_row[0] is not None and 5.0 <= max_gauge_row[0] <= 1000.0:
+                pool_size = int(round(float(max_gauge_row[0])))
 
         # 4. Gateway and acquire timeouts from logs or span durations
         gateway_timeout_ms = 3000
@@ -84,16 +99,14 @@ def fit_sim_params(db: str | Path | sqlite3.Connection) -> SimParams:
             if m:
                 gateway_timeout_ms = int(m.group(1))
         else:
-            cur.execute(
-                "SELECT ROUND(AVG(end_ms - start_ms)) FROM spans WHERE service = 'gateway' AND status_code = 504"
-            )
+            cur.execute("SELECT ROUND(AVG(end_ms - start_ms)) FROM spans WHERE status_code >= 500")
             dur_row = cur.fetchone()
             if dur_row and dur_row[0] is not None and dur_row[0] > 0:
                 gateway_timeout_ms = int(dur_row[0])
 
         acquire_timeout_ms = 5000
         cur.execute(
-            "SELECT message FROM logs WHERE message LIKE '%Failed to acquire DB connection from pool within %ms%' LIMIT 1"
+            "SELECT message FROM logs WHERE message LIKE '%Failed to acquire %within %ms%' OR message LIKE '%within %ms%' LIMIT 1"
         )
         acq_to_row = cur.fetchone()
         if acq_to_row and acq_to_row[0]:
@@ -102,19 +115,18 @@ def fit_sim_params(db: str | Path | sqlite3.Connection) -> SimParams:
                 acquire_timeout_ms = int(m.group(1))
 
         # 5. Leak probability: unreleased acquires / total acquires
-        # In logs: unhandled exception skipped release()
         cur.execute(
-            "SELECT COUNT(*) FROM logs WHERE service = 'auth-service' AND (message LIKE '%skipped release%' OR message LIKE '%leak%')"
+            "SELECT COUNT(*) FROM logs WHERE message LIKE '%skipped release%' OR message LIKE '%leak%'"
         )
         leak_logs = cur.fetchone()[0]
 
         cur.execute(
-            "SELECT COUNT(*) FROM spans WHERE service = 'db-pool' AND (name LIKE '%acquire%' OR name LIKE '%connection%')"
+            "SELECT COUNT(*) FROM spans WHERE parent_span_id IS NOT NULL AND (name LIKE '%acquire%' OR name LIKE '%connection%')"
         )
         acq_row = cur.fetchone()
         acq_spans = acq_row[0] if acq_row and acq_row[0] > 0 else 0
         if acq_spans == 0:
-            cur.execute("SELECT COUNT(*) FROM spans WHERE service = 'db-pool'")
+            cur.execute("SELECT COUNT(*) FROM spans WHERE parent_span_id IS NOT NULL")
             acq_row = cur.fetchone()
             acq_spans = acq_row[0] if acq_row and acq_row[0] > 0 else 1
 

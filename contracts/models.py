@@ -92,11 +92,15 @@ class HypothesisEvaluated(BaseModel):
 
 class IncidentReport(BaseModel):
     schema_version: str = "1.0"
+    incident_detected: bool = True
     timeline_events: list[TimelineEvent]
     hypotheses_evaluated: list[HypothesisEvaluated]
     evidence_pointers: list[EvidencePointer]
     estimated_clock_offsets_s: dict[str, float]
     remediation: list[str]
+    data_quality: dict = Field(default_factory=dict)
+    limitations: list[str] = Field(default_factory=list)
+    investigation_seconds: float | None = None
 
 
 class AgentEvent(BaseModel):

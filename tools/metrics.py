@@ -12,7 +12,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from contracts.constants import METRIC_SOURCES
 from contracts.models import MetricOnset
 from tools.skew import estimate_clock_offsets
 
@@ -36,7 +35,7 @@ def get_metric_derivatives(db: str | Path | sqlite3.Connection, metric_name: str
 
     Args:
         db: SQLite database connection or path.
-        metric_name: Name of metric (e.g., 'db_pool.active_connections').
+        metric_name: Name of metric.
 
     Returns:
         MetricOnset: Fitted onset metrics with corrected timestamp.
@@ -50,7 +49,7 @@ def get_metric_derivatives(db: str | Path | sqlite3.Connection, metric_name: str
         if not cur.fetchone():
             return MetricOnset(
                 metric=metric_name,
-                service=METRIC_SOURCES.get(metric_name, "db-pool"),
+                service="",
                 onset_corrected_ms=None,
                 peak_slope=0.0,
                 z_score=0.0,
@@ -61,7 +60,7 @@ def get_metric_derivatives(db: str | Path | sqlite3.Connection, metric_name: str
         # Determine emitting service
         cur.execute("SELECT service FROM metrics WHERE metric = ? LIMIT 1", (metric_name,))
         row = cur.fetchone()
-        service = row[0] if row else METRIC_SOURCES.get(metric_name, "db-pool")
+        service = row[0] if row else ""
 
         # Get clock skew offsets
         offsets_s = estimate_clock_offsets(conn)
@@ -153,7 +152,7 @@ def get_metric_derivatives(db: str | Path | sqlite3.Connection, metric_name: str
     except Exception:
         return MetricOnset(
             metric=metric_name,
-            service="db-pool",
+            service="",
             onset_corrected_ms=None,
             peak_slope=0.0,
             z_score=0.0,
@@ -181,7 +180,7 @@ def rank_metric_onsets(db: str | Path | sqlite3.Connection) -> list[MetricOnset]
         cur.execute("SELECT DISTINCT metric FROM metrics")
         metric_names = [row[0] for row in cur.fetchall()]
         if not metric_names:
-            metric_names = list(METRIC_SOURCES.keys())
+            return []
 
         onsets = [get_metric_derivatives(conn, m) for m in metric_names]
         # Sort by (onset is None, onset_corrected_ms)
