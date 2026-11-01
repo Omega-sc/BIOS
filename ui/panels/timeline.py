@@ -203,6 +203,7 @@ def create_timeline_figure(
 def _select_evidence(evidence_id: str) -> None:
     st.session_state["selected_evidence_id"] = evidence_id
     st.session_state["evidence_version"] = st.session_state.get("evidence_version", 0) + 1
+    st.session_state["open_evidence_dialog"] = evidence_id
 
 
 def render_timeline_panel(
@@ -293,13 +294,13 @@ def render_timeline_panel(
                 )
             with c2:
                 if ev.evidence:
-                    ptr = ev.evidence[0]
-                    btn_label = (
-                        f"Inspect {ptr.id[:14]}..." if len(ptr.id) > 14 else f"Inspect {ptr.id}"
-                    )
-                    st.button(
-                        btn_label,
-                        key=f"btn_ev_{ev.order}_{ptr.id}",
-                        on_click=_select_evidence,
-                        args=(ptr.id,),
-                    )
+                    for ptr in ev.evidence:
+                        is_active = ptr.id == st.session_state.get("selected_evidence_id")
+                        btn_label = f"Inspect: {ptr.id}"
+                        st.button(
+                            btn_label,
+                            key=f"btn_ev_{ev.order}_{ptr.id}",
+                            type="primary" if is_active else "secondary",
+                            on_click=_select_evidence,
+                            args=(ptr.id,),
+                        )

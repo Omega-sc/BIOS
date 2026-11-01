@@ -387,11 +387,22 @@ with st.sidebar:
         ),
     }
 
+    # Discover additional dataset files dynamically from data/
+    data_dir = ROOT_DIR / "data"
+    if data_dir.exists():
+        for extra in sorted(data_dir.glob("*.db")):
+            if extra.name != "incident.db" and not extra.name.startswith("."):
+                label = f"Dataset: {extra.stem}"
+                if label not in dataset_options:
+                    dataset_options[label] = str(extra)
+
     # Add available canonical scenario datasets
     if SCENARIOS_DIR.exists():
         scenario_files = sorted(SCENARIOS_DIR.glob("*_101.jsonl"))
         for sc_file in scenario_files:
-            dataset_options[f"Scenario: {sc_file.stem}"] = str(sc_file)
+            label = f"Scenario: {sc_file.stem}"
+            if label not in dataset_options:
+                dataset_options[label] = str(sc_file)
 
     selected_dataset_label = st.selectbox(
         "Select Dataset",
@@ -421,11 +432,11 @@ with st.sidebar:
     # Action Buttons
     col_btn1, col_btn2 = st.columns(2)
     start_investigation = col_btn1.button(
-        "Run Investigation", type="primary", use_container_width=True
+        "Run Investigation", type="primary", width="stretch"
     )
-    load_fixture = col_btn2.button("Load Fixture", use_container_width=True)
+    load_fixture = col_btn2.button("Load Fixture", width="stretch")
 
-    if st.button("Reset", use_container_width=True):
+    if st.button("Reset", width="stretch"):
         st.session_state["events"] = []
         st.session_state["report"] = load_golden_report()
         st.session_state["selected_evidence_id"] = ""
@@ -500,32 +511,103 @@ if start_investigation:
 
 
 # ==========================================
-# Cross-Tab Selected Evidence Quick Inspector
+# Evidence Inspection Modal & Quick Inspector
 # ==========================================
+@st.dialog("Evidence Record Inspector", width="large")
+def render_evidence_modal(evidence_id: str, db_path: str | Path) -> None:
+    """Render full modal dialog inspecting raw evidence record."""
+    ev_row = fetch_evidence_row(db_path, evidence_id)
+    if ev_row:
+        kind = str(ev_row.get("kind", "record")).upper()
+        tbl = ev_row.get("raw_sql_table", "unknown")
+        src = ev_row.get("source_dataset", Path(db_path).name)
+
+        st.markdown(
+            f"""
+            <div style="background-color: #EBF3EE; border-left: 4px solid #2D6A4F; padding: 12px 16px; border-radius: 6px; margin-bottom: 14px;">
+                <b style="font-size: 16px; color: #1B4332;">{evidence_id}</b>
+                <span style="background-color: #2D6A4F; color: #FAF9F6; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 10px;">{kind}</span>
+                <br/>
+                <span style="color: #52665A; font-size: 13px;">Verified in SQLite table <code>{tbl}</code> ({src})</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Service", str(ev_row.get("service", "N/A")))
+        with col2:
+            if kind == "SPAN":
+                st.metric("Status Code", f"HTTP {ev_row.get('status_code', 'N/A')}")
+            elif kind == "LOG":
+                st.metric("Log Level", str(ev_row.get("level", "N/A")))
+            elif kind == "METRIC":
+                st.metric("Metric Value", f"{float(ev_row.get('value', 0)):.4f}")
+        with col3:
+            if kind == "SPAN":
+                st.metric("Duration", f"{ev_row.get('duration_ms', 0)} ms")
+            elif kind == "LOG":
+                st.metric("Timestamp", f"{ev_row.get('ts_ms', 'N/A')}")
+            elif kind == "METRIC":
+                st.metric("Delta from Target", f"{ev_row.get('delta_ms', 0)} ms")
+
+        if kind == "LOG" and "message" in ev_row:
+            st.markdown(f"**Log Message:** `{ev_row['message']}`")
+
+        if kind == "SPAN" and "name" in ev_row:
+            st.markdown(f"**Operation / Endpoint:** `{ev_row['name']}`")
+
+        st.markdown("#### Complete Database Record")
+        st.json(ev_row)
+    else:
+        st.warning(
+            f"No database row found matching Evidence ID `{evidence_id}` in current dataset (`{Path(db_path).name}`) or fixtures."
+        )
+
+    if st.button("Close Inspector", key="btn_close_evidence_dialog", width="stretch"):
+        st.rerun()
+
+
+# Trigger modal inspector if requested by any button click callback
+if st.session_state.get("open_evidence_dialog"):
+    dialog_target = st.session_state.pop("open_evidence_dialog")
+    render_evidence_modal(dialog_target, effective_db_path)
+
+# Cross-Tab Selected Evidence Quick Inspector
 active_evidence_id = st.session_state.get("selected_evidence_id", "").strip()
 if active_evidence_id:
     ev_row = fetch_evidence_row(effective_db_path, active_evidence_id)
     with st.container():
-        insp_col1, insp_col2 = st.columns([5, 1])
+        insp_col1, insp_col2, insp_col3 = st.columns([4, 1.3, 1])
         with insp_col1:
+            src_desc = ev_row.get("source_dataset", Path(effective_db_path).name) if ev_row else ""
+            tbl_info = (
+                f" — Verified in SQLite table <code>{ev_row.get('raw_sql_table')}</code> ({src_desc}) (also synced to Raw Telemetry tab)"
+                if ev_row
+                else " — Not found in current dataset or fixtures"
+            )
             st.markdown(
                 f"""
                 <div style="background-color: #EBF3EE; border-left: 4px solid #1B4332; padding: 10px 14px; border-radius: 4px; margin-bottom: 8px; font-size: 13.5px; color: #1B4332;">
                     <b>Selected Evidence Pointer:</b> <code>{active_evidence_id}</code>
-                    {" — Verified in SQLite table <code>" + str(ev_row.get("raw_sql_table")) + "</code> (also synced to Raw Telemetry tab)" if ev_row else " — Not found in current dataset"}
+                    {tbl_info}
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
         with insp_col2:
-            if st.button("Clear Selection", key="clear_active_evidence", use_container_width=True):
+            if st.button("Open Modal Inspector", key="btn_reopen_modal", width="stretch"):
+                render_evidence_modal(active_evidence_id, effective_db_path)
+        with insp_col3:
+            if st.button("Clear Selection", key="clear_active_evidence", width="stretch"):
                 st.session_state["selected_evidence_id"] = ""
                 st.session_state["evidence_version"] = (
                     st.session_state.get("evidence_version", 0) + 1
                 )
                 st.rerun()
         if ev_row:
-            with st.expander(f"Inspect Raw SQLite Record: {active_evidence_id}", expanded=False):
+            with st.expander(f"Inspect Raw SQLite Record: {active_evidence_id}", expanded=True):
                 st.json(ev_row)
 
 

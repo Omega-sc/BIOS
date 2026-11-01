@@ -56,13 +56,19 @@ def generate_dag_dot(
     # Render discovered nodes
     rendered_node_ids = set()
     for n in nodes_list:
-        nid = str(n.get("id", ""))
+        if isinstance(n, dict):
+            nid = str(n.get("id", ""))
+            err_rate = float(n.get("error_rate", 0.0))
+            span_count = int(n.get("span_count", 0))
+        else:
+            nid = str(n)
+            err_rate = 0.0
+            span_count = 0
+
         if not nid or nid in rendered_node_ids:
             continue
         rendered_node_ids.add(nid)
 
-        err_rate = float(n.get("error_rate", 0.0))
-        span_count = int(n.get("span_count", 0))
         is_frontier_node = nid in ff
 
         if is_frontier_node:
@@ -95,23 +101,39 @@ def generate_dag_dot(
 
     # Render edges
     for e in edges_list:
-        src = str(e.get("source", "") or e.get("from", ""))
-        tgt = str(e.get("target", "") or e.get("to", ""))
-        if not src or not tgt:
+        if isinstance(e, dict):
+            src = str(e.get("source", "") or e.get("from", ""))
+            tgt = str(e.get("target", "") or e.get("to", ""))
+            calls = int(e.get("call_count", 0))
+            lat = float(e.get("mean_latency", 0.0))
+        elif isinstance(e, (list, tuple)) and len(e) >= 2:
+            src = str(e[0])
+            tgt = str(e[1])
+            calls = 0
+            lat = 0.0
+        else:
             continue
 
-        calls = int(e.get("call_count", 0))
-        lat = float(e.get("mean_latency", 0.0))
+        if not src or not tgt:
+            continue
 
         is_ff_edge = ff and (f"{src} -> {tgt}" in ff or f"{src}->{tgt}" in ff.replace(" ", ""))
 
         if is_ff_edge:
+            if calls > 0:
+                edge_label = f"FAILURE FRONTIER\\ncalls: {calls}, lat: {lat:.1f}ms"
+            else:
+                edge_label = "FAILURE FRONTIER"
             dot_lines.append(
-                f'  "{src}" -> "{tgt}" [label="FAILURE FRONTIER\\ncalls: {calls}, lat: {lat:.1f}ms", color="#1B4332", fontcolor="#1B4332", penwidth=4.0];'
+                f'  "{src}" -> "{tgt}" [label="{edge_label}", color="#1B4332", fontcolor="#1B4332", penwidth=4.0];'
             )
         else:
+            if calls > 0:
+                edge_label = f" calls: {calls} \\n lat: {lat:.1f}ms "
+            else:
+                edge_label = ""
             dot_lines.append(
-                f'  "{src}" -> "{tgt}" [label=" calls: {calls} \\n lat: {lat:.1f}ms ", color="#52665A", penwidth=1.5];'
+                f'  "{src}" -> "{tgt}" [label="{edge_label}", color="#52665A", penwidth=1.5];'
             )
 
     dot_lines.append("}")
@@ -162,20 +184,32 @@ def render_dag_panel(
         mid = (len(nodes) + 1) // 2
         with col1:
             for n in nodes[:mid]:
-                nid = n.get("id", "unknown")
-                err_rate = n.get("error_rate", 0.0)
-                spans = n.get("span_count", 0)
-                onset = n.get("metric_onset")
+                if isinstance(n, dict):
+                    nid = n.get("id", "unknown")
+                    err_rate = n.get("error_rate", 0.0)
+                    spans = n.get("span_count", 0)
+                    onset = n.get("metric_onset")
+                else:
+                    nid = str(n)
+                    err_rate = 0.0
+                    spans = 0
+                    onset = None
                 onset_str = f"+{onset / 1000.0:.1f}s" if onset else "None"
                 st.markdown(
                     f"- **`{nid}`**: Error Rate: `{err_rate * 100:.1f}%` | Spans: `{spans}` | Onset: `{onset_str}`"
                 )
         with col2:
             for n in nodes[mid:]:
-                nid = n.get("id", "unknown")
-                err_rate = n.get("error_rate", 0.0)
-                spans = n.get("span_count", 0)
-                onset = n.get("metric_onset")
+                if isinstance(n, dict):
+                    nid = n.get("id", "unknown")
+                    err_rate = n.get("error_rate", 0.0)
+                    spans = n.get("span_count", 0)
+                    onset = n.get("metric_onset")
+                else:
+                    nid = str(n)
+                    err_rate = 0.0
+                    spans = 0
+                    onset = None
                 onset_str = f"+{onset / 1000.0:.1f}s" if onset else "None"
                 st.markdown(
                     f"- **`{nid}`**: Error Rate: `{err_rate * 100:.1f}%` | Spans: `{spans}` | Onset: `{onset_str}`"

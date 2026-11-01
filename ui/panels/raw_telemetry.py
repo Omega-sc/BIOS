@@ -192,50 +192,48 @@ def load_telemetry_records(
     return pd.DataFrame(records[:limit])
 
 
-def fetch_evidence_row(db_path: str | Path, evidence_id: str) -> dict[str, Any] | None:
-    """Fetch exact raw database row for an evidence pointer ID."""
-    if not evidence_id or not Path(db_path).exists():
-        return None
-
-    conn = _get_connection(db_path)
+def _query_evidence_from_conn(conn: sqlite3.Connection, evidence_id: str) -> dict[str, Any] | None:
+    """Query a single sqlite3 connection for an evidence pointer."""
     cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = {r[0] for r in cur.fetchall()}
 
-    try:
-        # Case A: Metric pointer format: "<metric_name>@<ts_ms>"
-        if "@" in evidence_id:
-            parts = evidence_id.split("@")
-            metric_name = parts[0]
-            try:
-                target_ts = int(parts[1])
-            except ValueError:
-                target_ts = 0
+    # Case A: Metric pointer format: "<metric_name>@<ts_ms>"
+    if "@" in evidence_id and "metrics" in tables:
+        parts = evidence_id.split("@")
+        metric_name = parts[0]
+        try:
+            target_ts = int(parts[1])
+        except ValueError:
+            target_ts = 0
 
-            # Find nearest metric point within +/- 30s
-            cur.execute(
-                """
-                SELECT service, metric, ts_ms, value
-                FROM metrics
-                WHERE metric = ?
-                ORDER BY ABS(ts_ms - ?) ASC
-                LIMIT 1
-                """,
-                (metric_name, target_ts),
-            )
-            row = cur.fetchone()
-            if row:
-                return {
-                    "kind": "metric",
-                    "id": evidence_id,
-                    "service": row[0],
-                    "metric": row[1],
-                    "ts_ms": row[2],
-                    "value": row[3],
-                    "target_ts_ms": target_ts,
-                    "delta_ms": row[2] - target_ts,
-                    "raw_sql_table": "metrics",
-                }
+        # Find nearest metric point
+        cur.execute(
+            """
+            SELECT service, metric, ts_ms, value
+            FROM metrics
+            WHERE metric = ?
+            ORDER BY ABS(ts_ms - ?) ASC
+            LIMIT 1
+            """,
+            (metric_name, target_ts),
+        )
+        row = cur.fetchone()
+        if row and abs(row[2] - target_ts) <= 60000:
+            return {
+                "kind": "metric",
+                "id": evidence_id,
+                "service": row[0],
+                "metric": row[1],
+                "ts_ms": row[2],
+                "value": row[3],
+                "target_ts_ms": target_ts,
+                "delta_ms": row[2] - target_ts,
+                "raw_sql_table": "metrics",
+            }
 
-        # Case B: Span pointer
+    # Case B: Span pointer
+    if "spans" in tables:
         cur.execute(
             """
             SELECT span_id, trace_id, parent_span_id, service, name, start_ms, end_ms, status_code, attrs
@@ -265,7 +263,8 @@ def fetch_evidence_row(db_path: str | Path, evidence_id: str) -> dict[str, Any] 
                 "raw_sql_table": "spans",
             }
 
-        # Case C: Log pointer
+    # Case C: Log pointer
+    if "logs" in tables:
         cur.execute(
             """
             SELECT log_id, trace_id, span_id, service, ts_ms, level, message
@@ -288,9 +287,74 @@ def fetch_evidence_row(db_path: str | Path, evidence_id: str) -> dict[str, Any] 
                 "raw_sql_table": "logs",
             }
 
+    return None
+
+
+def fetch_evidence_row(db_path: str | Path, evidence_id: str) -> dict[str, Any] | None:
+    """Fetch exact raw database row for an evidence pointer ID.
+
+    Searches db_path first, with automatic fallback across fixture and scenario caches.
+    """
+    clean_id = (evidence_id or "").strip()
+    if not clean_id:
         return None
-    finally:
-        conn.close()
+
+    def _try_file(p: Path) -> dict[str, Any] | None:
+        if not p.exists():
+            return None
+        try:
+            conn = _get_connection(p)
+            try:
+                res = _query_evidence_from_conn(conn, clean_id)
+                if res:
+                    res["source_dataset"] = p.name
+                    return res
+            finally:
+                conn.close()
+        except Exception:
+            pass
+        return None
+
+    primary_path = Path(db_path) if db_path else None
+    if primary_path and primary_path.exists():
+        row = _try_file(primary_path)
+        if row:
+            return row
+
+    # Fallback to other scenario/fixture databases (e.g. tiny_telemetry.db or incident.db)
+    root_dir = Path(__file__).resolve().parent.parent.parent
+    cache_dir = root_dir / "data" / ".cache"
+    tiny_cache = cache_dir / "tiny_telemetry.db"
+    tiny_fixture = root_dir / "fixtures" / "tiny_telemetry.jsonl"
+
+    if not tiny_cache.exists() and tiny_fixture.exists():
+        try:
+            from ingest.load_jsonl import load_telemetry
+
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            load_telemetry(tiny_fixture, tiny_cache)
+        except Exception:
+            pass
+
+    fallback_candidates: list[Path] = []
+    if tiny_cache.exists():
+        fallback_candidates.append(tiny_cache)
+
+    incident_path = root_dir / "data" / "incident.db"
+    if incident_path.exists() and incident_path != primary_path:
+        fallback_candidates.append(incident_path)
+
+    if cache_dir.exists():
+        for f in sorted(cache_dir.glob("*.db")):
+            if f not in fallback_candidates and f != primary_path:
+                fallback_candidates.append(f)
+
+    for cand in fallback_candidates:
+        row = _try_file(cand)
+        if row:
+            return row
+
+    return None
 
 
 def style_telemetry_dataframe(
@@ -473,7 +537,8 @@ def render_raw_telemetry_panel(db_path: str | Path) -> None:
     if lookup_id:
         result = fetch_evidence_row(db_path, lookup_id)
         if result:
-            st.success(f"Found in SQLite table `{result.get('raw_sql_table')}`")
+            src_desc = result.get("source_dataset", Path(db_path).name)
+            st.success(f"Found in SQLite table `{result.get('raw_sql_table')}` ({src_desc})")
             st.json(result)
         else:
             st.warning(f"No database row found matching Evidence ID `{lookup_id}`.")

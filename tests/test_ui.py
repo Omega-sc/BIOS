@@ -258,3 +258,22 @@ def test_evidence_button_click_in_post_mortem():
     assert (
         at.text_input(key=f"evidence_input_{ver}").value == at.session_state["selected_evidence_id"]
     )
+
+
+def test_evidence_button_cross_dataset_resolution():
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(str(ROOT_DIR / "ui" / "app.py"), default_timeout=30)
+    at.run()
+    assert not at.exception
+
+    # Find span-gw-3 button
+    gw_buttons = [b for b in at.button if "span-gw-3" in b.label]
+    assert len(gw_buttons) > 0, "Expected span-gw-3 button"
+    gw_buttons[0].click().run()
+    assert not at.exception
+    assert at.session_state["selected_evidence_id"] == "span-gw-3"
+
+    # Expander must be rendered with verified record
+    insp_expanders = [e for e in at.expander if "span-gw-3" in e.label]
+    assert len(insp_expanders) == 1

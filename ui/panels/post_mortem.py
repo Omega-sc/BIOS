@@ -12,6 +12,7 @@ from contracts.models import IncidentReport
 def _select_evidence(evidence_id: str) -> None:
     st.session_state["selected_evidence_id"] = evidence_id
     st.session_state["evidence_version"] = st.session_state.get("evidence_version", 0) + 1
+    st.session_state["open_evidence_dialog"] = evidence_id
 
 
 def render_post_mortem_panel(
@@ -120,9 +121,11 @@ def render_post_mortem_panel(
                 st.markdown(f"**Supporting Evidence ({len(h.supporting)}):**")
                 if h.supporting:
                     for ptr in h.supporting:
+                        is_active = ptr.id == st.session_state.get("selected_evidence_id")
                         st.button(
                             f"Inspect: {ptr.id}",
                             key=f"btn_supp_{h.id}_{ptr.id}",
+                            type="primary" if is_active else "secondary",
                             on_click=_select_evidence,
                             args=(ptr.id,),
                         )
@@ -134,9 +137,11 @@ def render_post_mortem_panel(
                 st.markdown(f"**Refuting Evidence ({len(h.refuting)}):**")
                 if h.refuting:
                     for ptr in h.refuting:
+                        is_active = ptr.id == st.session_state.get("selected_evidence_id")
                         st.button(
                             f"Inspect: {ptr.id}",
                             key=f"btn_ref_{h.id}_{ptr.id}",
+                            type="primary" if is_active else "secondary",
                             on_click=_select_evidence,
                             args=(ptr.id,),
                         )
@@ -168,10 +173,12 @@ def render_post_mortem_panel(
                 st.markdown("**Evidence Pointers:**")
                 for ptr in ev.evidence:
                     b_col, n_col = st.columns([1, 3])
+                    is_active = ptr.id == st.session_state.get("selected_evidence_id")
                     with b_col:
                         st.button(
                             f"Inspect: {ptr.id}",
                             key=f"btn_tl_{ev.order}_{ptr.id}",
+                            type="primary" if is_active else "secondary",
                             on_click=_select_evidence,
                             args=(ptr.id,),
                         )
