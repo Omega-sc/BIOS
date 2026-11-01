@@ -233,7 +233,7 @@ def failure_frontier(
         if deps_healthy:
             deepest_failing.append(n)
 
-    # If a failing node has outgoing dependencies that are all healthy (e.g. gateway timeout misconfig)
+    # If a failing node has outgoing dependencies that are all healthy (e.g. timeout misconfiguration)
     for n in deepest_failing:
         if list(dag.successors(n)):
             return n

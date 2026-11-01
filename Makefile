@@ -4,7 +4,7 @@ RUFF ?= $(UV) run ruff
 PYTEST ?= $(UV) run pytest
 STREAMLIT ?= $(UV) run streamlit
 
-.PHONY: all install format lint test check smoke dataset calibrate eval demo-replay clean
+.PHONY: all install format lint lint-hardcode blind-check test check smoke dataset calibrate eval demo-replay clean
 
 install:
 	$(UV) pip install -r requirements.txt
@@ -15,12 +15,20 @@ format:
 lint:
 	$(RUFF) check .
 
+lint-hardcode:
+	$(PYTHON) eval/lint_hardcode.py
+
+blind-check:
+	$(PYTHON) eval/blind/blind_check.py
+
 test:
 	$(PYTEST) -v tests/
 
 check:
 	$(RUFF) check .
 	$(RUFF) format --check .
+	$(PYTHON) eval/lint_hardcode.py
+	$(PYTHON) eval/blind/blind_check.py
 	$(PYTEST) -v tests/
 
 smoke:

@@ -1,7 +1,7 @@
 """Configuration parameters and thresholds for Track 09 incident investigation.
 
 All thresholds are chosen based on statistical properties and empirical validation
-on development scenarios (pool_leak, slow_db, retry_storm, gateway_timeout_misconfig).
+on development scenarios (pool_leak, slow_db, retry_storm, timeout_misconfig).
 """
 
 from __future__ import annotations

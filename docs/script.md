@@ -112,3 +112,11 @@
 > *1. Every `EvidencePointer` must resolve to an exact row in SQLite: a valid `span_id` in `spans`, a valid `log_id` in `logs`, or a timestamp-matched metric reading in `metrics`.*
 > *2. Timeline events claiming to be `verified_fact` are automatically demoted to `inference` if they lack a resolving database row.*
 > *3. In the UI Left Column, clicking any evidence pointer immediately queries SQLite and renders the raw record, providing 100% auditable ground truth."*
+
+### Question 5: *"How does the system behave when telemetry is corrupt, missing, or healthy?"*
+**Authoritative Answer**:
+> *"We built graceful degradation and honest abstention into the core state machine:*
+> *1. **Healthy Data**: Our MAD-based anomaly gate evaluates robust z-scores over baseline. If no metrics or error rates deviate, the agent sets `incident_detected = False` and abstains rather than inventing a phantom outage.*
+> *2. **Inconclusive Evidence**: If score margins fall below threshold, hypotheses receive verdict `unresolved` with confidence capped and missing signals explicitly enumerated in `missing_evidence`.*
+> *3. **Missing Spans/Logs**: If trace context is lost, clock offset estimation safely returns an empty map with an explicit limitation note, rather than fabricating zeros.*
+> *4. **Generalization Enforcement**: Our AST linter (`make lint-hardcode`) continuously verifies that zero scenario-specific strings exist in runtime code, backed by 4/4 passing on `eval/blind/blind_check.py` across renamed services, zero skew, and unseen topologies."*

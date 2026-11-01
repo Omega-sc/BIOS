@@ -21,10 +21,21 @@ def load_telemetry_records(
     service_filter: str = "All",
     type_filter: str = "All",
     errors_only: bool = False,
+    clock_offsets: dict[str, float] | None = None,
 ) -> pd.DataFrame:
     """Load telemetry records from SQLite database for display in raw telemetry view."""
     conn = _get_connection(db_path)
     records: list[dict[str, Any]] = []
+
+    if clock_offsets is None:
+        try:
+            from tools.skew import estimate_clock_offsets
+
+            clock_offsets = estimate_clock_offsets(db_path)
+        except Exception:
+            clock_offsets = {}
+
+    skewed_services = {s for s, off in (clock_offsets or {}).items() if abs(off) >= 0.5}
 
     try:
         cur = conn.cursor()
@@ -32,6 +43,14 @@ def load_telemetry_records(
         # Check existing tables
         cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {row[0] for row in cur.fetchall()}
+
+        # Baseline timestamp for relative time calculation
+        t_base = 0
+        if "spans" in tables:
+            cur.execute("SELECT MIN(start_ms) FROM spans")
+            r = cur.fetchone()
+            if r and r[0] is not None:
+                t_base = r[0]
 
         # 1. Spans
         if "spans" in tables and type_filter in ("All", "spans"):
@@ -60,13 +79,13 @@ def load_telemetry_records(
                         "type": "span",
                         "service": svc,
                         "raw_timestamp_ms": s_ms,
-                        "rel_time_s": round((s_ms - 1700000000000) / 1000.0, 1),
+                        "rel_time_s": round((s_ms - t_base) / 1000.0, 1),
                         "name_or_metric": name,
                         "status_or_level": status_str,
                         "duration_ms": dur_ms,
                         "details": f"trace:{tid[:8]}... dur:{dur_ms}ms status:{sc}",
                         "is_error": sc >= 500,
-                        "is_skewed": svc == "auth-service",
+                        "is_skewed": svc in skewed_services,
                     }
                 )
 
@@ -95,13 +114,13 @@ def load_telemetry_records(
                         "type": "log",
                         "service": svc,
                         "raw_timestamp_ms": ts,
-                        "rel_time_s": round((ts - 1700000000000) / 1000.0, 1),
+                        "rel_time_s": round((ts - t_base) / 1000.0, 1),
                         "name_or_metric": lvl,
                         "status_or_level": lvl,
                         "duration_ms": None,
                         "details": msg,
                         "is_error": lvl in ("ERROR", "FATAL"),
-                        "is_skewed": svc == "auth-service",
+                        "is_skewed": svc in skewed_services,
                     }
                 )
 
@@ -135,13 +154,13 @@ def load_telemetry_records(
                         "type": "metric",
                         "service": svc,
                         "raw_timestamp_ms": ts,
-                        "rel_time_s": round((ts - 1700000000000) / 1000.0, 1),
+                        "rel_time_s": round((ts - t_base) / 1000.0, 1),
                         "name_or_metric": m_name,
                         "status_or_level": f"{val:.2f}",
                         "duration_ms": None,
                         "details": f"value = {val:.4f}",
                         "is_error": is_err,
-                        "is_skewed": svc == "auth-service",
+                        "is_skewed": svc in skewed_services,
                     }
                 )
 
@@ -168,9 +187,9 @@ def load_telemetry_records(
             ]
         )
 
-    df = pd.DataFrame(records)
-    df = df.sort_values(by="raw_timestamp_ms").reset_index(drop=True)
-    return df
+    # Sort stably by raw timestamp
+    records.sort(key=lambda x: x["raw_timestamp_ms"])
+    return pd.DataFrame(records[:limit])
 
 
 def fetch_evidence_row(db_path: str | Path, evidence_id: str) -> dict[str, Any] | None:
@@ -269,14 +288,18 @@ def fetch_evidence_row(db_path: str | Path, evidence_id: str) -> dict[str, Any] 
                 "raw_sql_table": "logs",
             }
 
+        return None
     finally:
         conn.close()
 
-    return None
 
-
-def style_telemetry_dataframe(df: pd.DataFrame):
-    """Style raw telemetry records using the Jungle Green and Off-White palette."""
+def style_telemetry_dataframe(
+    df: pd.DataFrame,
+    skewed_services: set[str] | None = None,
+) -> Any:
+    """Apply styling highlighting errors and skewed records."""
+    if df.empty:
+        return df
 
     def _row_style(row: pd.Series) -> list[str]:
         status_val = str(row.get("Status / Val", "")).upper()
@@ -288,7 +311,7 @@ def style_telemetry_dataframe(df: pd.DataFrame):
             or "FATAL" in status_val
         )
         is_warn = "WARN" in status_val
-        is_skewed = svc == "auth-service"
+        is_skewed = svc in (skewed_services or set())
 
         if is_err:
             return ["background-color: #D8F3DC; color: #1B4332; font-weight: 600;"] * len(row)
@@ -308,10 +331,9 @@ def render_raw_telemetry_panel(db_path: str | Path) -> None:
     st.markdown(
         """
         <div style="background-color: #EBF3EE; border-left: 4px solid #2D6A4F; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; font-size: 13.5px; color: #1B4332;">
-            <b>Unaligned Wall-Clock Timestamps</b>: Notice <code>auth-service</code> records arrive with a
-            <b>+12.0s clock skew</b> relative to <code>gateway</code> and <code>db-pool</code>. In uncorrected coordinates,
-            gateway 504 errors appear <i>before</i> auth pool exhaustion, presenting a false causal paradox.
-            Additionally, telemetry reflects ~15% random log drop.
+            <b>Unaligned Wall-Clock Timestamps</b>: Services may emit records with uncorrected clock skew relative
+            to upstream reference services. In uncorrected coordinates, downstream and upstream symptoms may appear
+            out of order, presenting a false causal paradox. Telemetry also reflects dropped logs and span loss.
         </div>
         """,
         unsafe_allow_html=True,
@@ -320,6 +342,22 @@ def render_raw_telemetry_panel(db_path: str | Path) -> None:
     if not Path(db_path).exists():
         st.warning(f"Database file not found: `{db_path}`")
         return
+
+    # Extract distinct services for dynamic filtering
+    service_options = ["All"]
+    try:
+        conn = _get_connection(db_path)
+        cur = conn.cursor()
+        svcs = set()
+        for tbl in ["spans", "logs", "metrics"]:
+            cur.execute(f"SELECT DISTINCT service FROM {tbl}")
+            for r in cur.fetchall():
+                if r[0]:
+                    svcs.add(str(r[0]))
+        conn.close()
+        service_options.extend(sorted(svcs))
+    except Exception:
+        pass
 
     # Filter controls in columns
     fcol1, fcol2, fcol3 = st.columns([1, 1, 1])
@@ -332,7 +370,7 @@ def render_raw_telemetry_panel(db_path: str | Path) -> None:
     with fcol2:
         service_filter = st.selectbox(
             "Service",
-            ["All", "gateway", "auth-service", "db-pool", "frontend"],
+            service_options,
             key="raw_svc_filter",
         )
     with fcol3:
@@ -370,7 +408,8 @@ def render_raw_telemetry_panel(db_path: str | Path) -> None:
             }
         )
 
-        styled_df = style_telemetry_dataframe(display_df)
+        skewed_svcs = set(df[df["is_skewed"]]["service"].unique()) if "is_skewed" in df else set()
+        styled_df = style_telemetry_dataframe(display_df, skewed_services=skewed_svcs)
         st.dataframe(
             styled_df,
             use_container_width=True,
@@ -389,15 +428,20 @@ def render_raw_telemetry_panel(db_path: str | Path) -> None:
     st.markdown("#### Evidence Row Direct SQLite Lookup")
     st.caption("Verify any cited evidence pointer directly against raw SQLite records.")
 
-    sample_ids = [
-        "",
-        "db_pool.active_connections@1700000090000",
-        "span-gw-3",
-        "log-auth-5",
-        "frontend.cpu_pct@1700000125000",
-        "log-auth-3",
-        "gateway.error_rate_5xx@1700000095000",
-    ]
+    # Dynamically extract sample IDs from database
+    sample_ids = [""]
+    try:
+        conn = _get_connection(db_path)
+        cur = conn.cursor()
+        cur.execute("SELECT span_id FROM spans LIMIT 2")
+        sample_ids.extend([r[0] for r in cur.fetchall() if r[0]])
+        cur.execute("SELECT log_id FROM logs LIMIT 2")
+        sample_ids.extend([r[0] for r in cur.fetchall() if r[0]])
+        cur.execute("SELECT metric, ts_ms FROM metrics LIMIT 2")
+        sample_ids.extend([f"{r[0]}@{r[1]}" for r in cur.fetchall() if r[0]])
+        conn.close()
+    except Exception:
+        pass
 
     def _on_sample_select() -> None:
         val = st.session_state.get("quick_evidence_sample", "")
@@ -421,7 +465,7 @@ def render_raw_telemetry_panel(db_path: str | Path) -> None:
         evidence_id_input = st.text_input(
             "Evidence ID (span_id, log_id, or metric@timestamp)",
             value=current_val,
-            placeholder="e.g. span-gw-3 or log-auth-5",
+            placeholder="e.g. span_id, log_id, or metric@ts",
             key=f"evidence_input_{current_ver}",
         )
 

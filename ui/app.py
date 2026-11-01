@@ -545,15 +545,11 @@ tabs = st.tabs(
 
 current_report: IncidentReport | None = st.session_state.get("report")
 current_events: list[AgentEvent] = st.session_state.get("events", [])
-clock_offsets = (
-    current_report.estimated_clock_offsets_s
-    if current_report
-    else {"auth-service": 12.0, "gateway": 0.0, "db-pool": 0.0}
-)
+clock_offsets = current_report.estimated_clock_offsets_s if current_report else {}
 
 # Dynamically extract DAG data, failure frontier, and counterfactuals from events/report
 dag_data_from_events = None
-frontier_from_events = "auth-service -> db-pool"
+frontier_from_events = None
 initial_cf = None
 
 for ev in current_events:

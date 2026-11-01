@@ -1,4 +1,4 @@
-"""Reconstructed timeline panel with Plotly Gantt/Scatter and clock skew correction toggle (owned by P4)."""
+"""Reconstructed timeline panel with Plotly Gantt/Scatter and dynamic clock skew correction toggle."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import streamlit as st
 
 from contracts.models import TimelineEvent
 
+PALETTE = ["#1B4332", "#2D6A4F", "#40916C", "#52665A", "#74C69D", "#B7CEB8"]
+
 
 def create_timeline_figure(
     timeline_events: list[TimelineEvent | dict[str, Any]],
@@ -18,11 +20,10 @@ def create_timeline_figure(
     """Create interactive Plotly timeline scatter/Gantt chart.
 
     When skew_corrected is False:
-        auth-service timestamps are shifted late (+12.0s), demonstrating the paradoxical
-        inversion where gateway 504 errors appear to precede downstream auth pool exhaustion.
+        Timestamps reflect raw wall-clock time with estimated skew added back.
 
     When skew_corrected is True:
-        auth-service timestamps are corrected, restoring true chronological order.
+        Timestamps are corrected using estimated clock offsets, restoring chronological causal order.
     """
     if not timeline_events:
         fig = go.Figure()
@@ -37,47 +38,42 @@ def create_timeline_figure(
         )
         return fig
 
-    offsets = clock_offsets or {
-        "auth-service": 12.0,
-        "gateway": 0.0,
-        "db-pool": 0.0,
-        "frontend": 0.0,
-    }
-    auth_offset_ms = int(offsets.get("auth-service", 12.0) * 1000)
+    offsets = clock_offsets or {}
 
-    # Base reference timestamp (incident start)
-    base_t = 1700000000000
+    # Parse events
+    events: list[TimelineEvent] = []
+    for item in timeline_events:
+        if isinstance(item, dict):
+            events.append(TimelineEvent.model_validate(item))
+        else:
+            events.append(item)
 
-    service_y_map = {
-        "db-pool": 1,
-        "auth-service": 2,
-        "gateway": 3,
-        "frontend": 4,
-    }
+    # Discover unique services preserving order of appearance
+    unique_services: list[str] = []
+    for ev in events:
+        if ev.service and ev.service not in unique_services:
+            unique_services.append(ev.service)
+    if not unique_services:
+        unique_services = ["unknown"]
 
-    colors = {
-        "db-pool": "#1B4332",
-        "auth-service": "#2D6A4F",
-        "gateway": "#40916C",
-        "frontend": "#74C69D",
-    }
+    service_y_map = {svc: idx + 1 for idx, svc in enumerate(unique_services)}
+    colors = {svc: PALETTE[i % len(PALETTE)] for i, svc in enumerate(unique_services)}
+
+    # Base reference timestamp (earliest corrected event or 0)
+    base_t = min((e.t_corrected_ms for e in events), default=0)
 
     fig = go.Figure()
 
     # Process events and calculate effective timestamps
     processed_events = []
-    for item in timeline_events:
-        if isinstance(item, dict):
-            ev = TimelineEvent.model_validate(item)
-        else:
-            ev = item
-
+    for ev in events:
         svc = ev.service
         claim_type = ev.claim_type
+        svc_offset_ms = int(offsets.get(svc, 0.0) * 1000)
 
         # Calculate displayed timestamp
-        if not skew_corrected and svc == "auth-service":
-            display_t_ms = ev.t_corrected_ms + auth_offset_ms
+        if not skew_corrected:
+            display_t_ms = ev.t_corrected_ms + svc_offset_ms
         else:
             display_t_ms = ev.t_corrected_ms
 
@@ -101,7 +97,7 @@ def create_timeline_figure(
 
     # Draw timeline connecting path
     x_line = [e["rel_s"] for e in processed_events]
-    y_line = [service_y_map.get(e["service"], 2) for e in processed_events]
+    y_line = [service_y_map.get(e["service"], 1) for e in processed_events]
     fig.add_trace(
         go.Scatter(
             x=x_line,
@@ -123,7 +119,7 @@ def create_timeline_figure(
             continue
 
         x_pts = [e["rel_s"] for e in type_events]
-        y_pts = [service_y_map.get(e["service"], 2) for e in type_events]
+        y_pts = [service_y_map.get(e["service"], 1) for e in type_events]
         m_colors = [colors.get(e["service"], "#2D6A4F") for e in type_events]
         custom_text = [
             f"<b>Order #{e['order']}</b> (+{e['rel_s']}s)<br>"
@@ -155,16 +151,15 @@ def create_timeline_figure(
         )
 
     # Layout styling
+    title_text = (
+        "<b>Reconstructed Incident Chronology</b>: True Causal Time (Skew Corrected)"
+        if skew_corrected
+        else "<b>Reconstructed Incident Chronology</b>: Raw Wall-Clock (Uncorrected Telemetry)"
+    )
+
     fig.update_layout(
         title=dict(
-            text=(
-                "<b>Reconstructed Incident Chronology</b>: "
-                + (
-                    "True Causal Time (-12.0s Skew Corrected)"
-                    if skew_corrected
-                    else "Raw Wall-Clock (Uncorrected +12.0s Skew)"
-                )
-            ),
+            text=title_text,
             font=dict(size=14, color="#1B4332"),
         ),
         xaxis=dict(
@@ -177,10 +172,10 @@ def create_timeline_figure(
         yaxis=dict(
             title="",
             tickmode="array",
-            tickvals=[1, 2, 3, 4],
-            ticktext=["db-pool", "auth-service", "gateway", "frontend"],
+            tickvals=list(range(1, len(unique_services) + 1)),
+            ticktext=unique_services,
             gridcolor="#D8E2DC",
-            range=[0.5, 4.5],
+            range=[0.5, len(unique_services) + 0.5],
         ),
         height=380,
         margin=dict(l=80, r=30, t=50, b=50),
@@ -217,30 +212,29 @@ def render_timeline_panel(
     """Render reconstructed timeline panel with skew correction toggle."""
     st.subheader("Reconstructed Timeline & Causality Analysis")
 
+    offsets = clock_offsets or {}
+    skewed_svcs = [f"`{s}`: {off:+.1f}s" for s, off in offsets.items() if abs(off) >= 0.1]
+    skew_summary = " | ".join(skewed_svcs) if skewed_svcs else "No significant skew detected"
+
     t_col1, t_col2 = st.columns([1.2, 1])
     with t_col1:
         skew_corrected = st.toggle(
-            "Apply Skew Correction (-12.0s on auth-service)",
+            "Apply Skew Correction",
             value=st.session_state.get("skew_corrected", True),
             key="skew_toggle_widget",
         )
         st.session_state["skew_corrected"] = skew_corrected
 
     with t_col2:
-        offsets = clock_offsets or {"auth-service": 12.0, "gateway": 0.0, "db-pool": 0.0}
-        offset_val = offsets.get("auth-service", 12.0)
-        st.caption(
-            f"Estimated Skew: `auth-service`: +{offset_val:.1f}s | `gateway`: 0.0s | `db-pool`: 0.0s"
-        )
+        st.caption(f"Estimated Skew: {skew_summary}")
 
-    # Causal reversal banner in two-colour scheme
     if not skew_corrected:
         st.markdown(
             """
             <div style="background-color: #F4F3EE; border-left: 4px solid #1B4332; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; font-size: 13.5px; color: #1B4332;">
-                <b>Apparent Causal Paradox (Uncorrected Wall-Clock)</b>: Notice that Gateway HTTP 504 timeouts appear at
-                <code>+95.0s</code>, which is <b>prior to</b> auth-service connection pool exhaustion appearing at <code>+102.0s - +112.0s</code>.
-                This apparent paradox misleads responders into suspecting gateway timeouts rather than the downstream pool leak.
+                <b>Apparent Causal Paradox (Uncorrected Wall-Clock)</b>: In uncorrected coordinates,
+                clock skew can shift root-cause downstream events later than symptom events in upstream callers,
+                presenting an apparent causal inversion.
             </div>
             """,
             unsafe_allow_html=True,
@@ -249,9 +243,8 @@ def render_timeline_panel(
         st.markdown(
             """
             <div style="background-color: #D8F3DC; border-left: 4px solid #2D6A4F; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; font-size: 13.5px; color: #1B4332;">
-                <b>True Causality Restored (Skew Corrected)</b>: By shifting <code>auth-service</code> timestamps forward by -12.0s,
-                db-pool saturation occurs at <code>+90.0s</code>, strictly <b>preceding</b> gateway 504 errors at <code>+95.0s</code>.
-                Frontend CPU spike follows at <code>+125.0s</code> (+30s lag), proving client retries are an amplifier rather than root cause.
+                <b>True Causality Restored (Skew Corrected)</b>: Synchronizing event timestamps using estimated
+                clock offsets restores true chronological order, aligning symptoms with their root cause origin.
             </div>
             """,
             unsafe_allow_html=True,
@@ -260,35 +253,53 @@ def render_timeline_panel(
     fig = create_timeline_figure(
         timeline_events,
         skew_corrected=skew_corrected,
-        clock_offsets=clock_offsets,
+        clock_offsets=offsets,
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Summary table of timeline events
-    st.markdown("#### Chronological Events Sequence")
+    # Event drill-down table
+    st.markdown("#### Chronological Sequence & Evidence Citations")
+
+    parsed_events: list[TimelineEvent] = []
     for item in timeline_events:
         if isinstance(item, dict):
-            ev = TimelineEvent.model_validate(item)
+            parsed_events.append(TimelineEvent.model_validate(item))
         else:
-            ev = item
+            parsed_events.append(item)
 
-        badge = "Verified Fact" if ev.claim_type == "verified_fact" else "Inference"
-        rel_s = round((ev.t_corrected_ms - 1700000000000) / 1000.0, 1)
+    if not parsed_events:
+        st.info("No timeline events to display.")
+        return
 
-        with st.expander(f"Order #{ev.order} (+{rel_s}s / {ev.service}): {ev.description[:60]}..."):
-            st.markdown(f"**Claim Type:** `{badge}`")
-            st.markdown(f"**Description:** {ev.description}")
-            st.markdown(f"**Corrected Timestamp:** `{ev.t_corrected_ms}` (+{rel_s}s)")
-            if ev.evidence:
-                st.markdown("**Cited Evidence:**")
-                for ptr in ev.evidence:
-                    b_col, n_col = st.columns([1.2, 3])
-                    with b_col:
-                        st.button(
-                            f"Inspect: {ptr.id}",
-                            key=f"btn_tl_panel_{ev.order}_{ptr.id}",
-                            on_click=_select_evidence,
-                            args=(ptr.id,),
-                        )
-                    with n_col:
-                        st.caption(f"[{ptr.kind}] *{ptr.note}*")
+    # Render event cards
+    for ev in sorted(parsed_events, key=lambda x: x.order):
+        badge_bg = "#2D6A4F" if ev.claim_type == "verified_fact" else "#52665A"
+        claim_label = "VERIFIED FACT" if ev.claim_type == "verified_fact" else "INFERENCE"
+
+        with st.container():
+            c1, c2 = st.columns([4, 1])
+            with c1:
+                st.markdown(
+                    f"""
+                    <div style="margin-bottom: 4px;">
+                        <span style="background-color:{badge_bg};color:#FAF9F6;padding:2px 6px;border-radius:4px;font-size:10.5px;font-weight:700;">{claim_label}</span>
+                        <b>Event #{ev.order}</b> &nbsp;|&nbsp; <code>{ev.service}</code> &nbsp;|&nbsp; <i>t = +{(ev.t_corrected_ms - parsed_events[0].t_corrected_ms) / 1000.0:.1f}s</i>
+                    </div>
+                    <div style="font-size: 13.5px; color: #2C3E35; margin-bottom: 6px;">
+                        {ev.description}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with c2:
+                if ev.evidence:
+                    ptr = ev.evidence[0]
+                    btn_label = (
+                        f"Inspect {ptr.id[:14]}..." if len(ptr.id) > 14 else f"Inspect {ptr.id}"
+                    )
+                    st.button(
+                        btn_label,
+                        key=f"btn_ev_{ev.order}_{ptr.id}",
+                        on_click=_select_evidence,
+                        args=(ptr.id,),
+                    )

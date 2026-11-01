@@ -83,39 +83,43 @@ def test_evidence_row_direct_lookup():
 
 
 def test_dag_dot_generation():
-    # 1. Default failure frontier
+    # 1. Failure frontier rendering
     dot = generate_dag_dot(failure_frontier="auth-service -> db-pool")
     assert dot.startswith("digraph")
-    assert "gateway" in dot
     assert "auth-service" in dot
     assert "db-pool" in dot
-    assert "frontend" in dot
     assert "FAILURE FRONTIER" in dot
     assert "#1B4332" in dot
-    assert "calls: 112" in dot
-    assert "lat: 21.0ms" in dot
 
-    # 2. Alternative failure frontier: gateway -> auth-service
+    # 2. Alternative failure frontier
     dot_alt = generate_dag_dot(failure_frontier="gateway -> auth-service")
-    assert "digraph" in dot_alt
+    assert dot_alt.startswith("digraph")
     assert "gateway" in dot_alt
+    assert "auth-service" in dot_alt
     assert "FAILURE FRONTIER" in dot_alt
-    assert "Timeout / Upstream Stall" in dot_alt
 
-    # 3. Frontier on client retry: frontend -> gateway
-    dot_fe = generate_dag_dot(failure_frontier="frontend -> gateway")
-    assert "FAILURE FRONTIER" in dot_fe
-    assert "Client Retry Storm" in dot_fe
+    # 3. Frontier on arbitrary/renamed services
+    dot_renamed = generate_dag_dot(failure_frontier="service-x -> service-y")
+    assert "service-x" in dot_renamed
+    assert "service-y" in dot_renamed
+    assert "FAILURE FRONTIER" in dot_renamed
 
-    # 4. Custom dag_data edge annotations
+    # 4. Custom dag_data edge and node annotations
     custom_dag = {
+        "nodes": [
+            {"id": "service-a", "error_rate": 0.0, "span_count": 50},
+            {"id": "service-b", "error_rate": 0.25, "span_count": 50},
+        ],
         "links": [
-            {"source": "frontend", "target": "gateway", "call_count": 999, "mean_latency": 12.3}
-        ]
+            {"source": "service-a", "target": "service-b", "call_count": 999, "mean_latency": 12.3}
+        ],
     }
-    dot_custom = generate_dag_dot(dag_data=custom_dag)
+    dot_custom = generate_dag_dot(dag_data=custom_dag, failure_frontier="service-a -> service-b")
+    assert "service-a" in dot_custom
+    assert "service-b" in dot_custom
     assert "calls: 999" in dot_custom
     assert "lat: 12.3ms" in dot_custom
+    assert "FAILURE FRONTIER" in dot_custom
 
 
 def test_timeline_figure_and_skew_correction():

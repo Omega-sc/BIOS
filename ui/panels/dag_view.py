@@ -1,4 +1,4 @@
-"""Service topology DAG view panel with Graphviz rendering (owned by P4)."""
+"""Service topology DAG view panel with dynamic Graphviz rendering."""
 
 from __future__ import annotations
 
@@ -9,70 +9,14 @@ import streamlit as st
 
 def generate_dag_dot(
     dag_data: dict[str, Any] | None = None,
-    failure_frontier: str | None = "auth-service -> db-pool",
+    failure_frontier: str | None = None,
 ) -> str:
-    """Generate Graphviz DOT specification highlighting the localized failure frontier.
+    """Generate Graphviz DOT specification dynamically highlighting the failure frontier.
 
     Annotates edges with call counts and mean latencies, and highlights the failure frontier
-    boundary and root cause node using the Jungle Green and Off-White palette.
+    boundary and failing nodes using the Jungle Green and Off-White palette.
     """
-    ff = (failure_frontier or "auth-service -> db-pool").strip()
-
-    # Determine default or extracted edge stats
-    edge_stats = {
-        ("frontend", "gateway"): {"calls": 124, "latency_ms": 48.2},
-        ("gateway", "auth-service"): {"calls": 118, "latency_ms": 41.5},
-        ("auth-service", "db-pool"): {"calls": 112, "latency_ms": 21.0},
-    }
-
-    # If dag_data has link/edge annotations, extract them
-    if dag_data and isinstance(dag_data, dict):
-        links = dag_data.get("links") or dag_data.get("edge_metrics") or []
-        if isinstance(links, list):
-            for link in links:
-                if isinstance(link, dict):
-                    src = link.get("source") or link.get("from")
-                    tgt = link.get("target") or link.get("to")
-                    if (src, tgt) in edge_stats:
-                        if "call_count" in link:
-                            edge_stats[(src, tgt)]["calls"] = link["call_count"]
-                        if "mean_latency" in link:
-                            edge_stats[(src, tgt)]["latency_ms"] = link["mean_latency"]
-
-    # Frontier edge checks
-    is_auth_db = "auth-service" in ff and "db-pool" in ff
-    is_gw_auth = "gateway" in ff and "auth-service" in ff
-    is_fe_gw = "frontend" in ff and "gateway" in ff
-    is_node_gw = ff == "gateway"
-    is_node_db = ff == "db-pool"
-
-    # Node styling in Jungle Green & Off-White
-    fe_color = "#1B4332" if is_fe_gw else "#74C69D"
-    fe_fill = "#D8F3DC" if is_fe_gw else "#FAF9F6"
-    fe_pen = "3.5" if is_fe_gw else "1.5"
-    fe_role = "[Root Cause Origin]" if is_fe_gw else "[Client Tier]"
-
-    gw_color = "#1B4332" if (is_gw_auth or is_node_gw) else "#2D6A4F"
-    gw_fill = "#D8F3DC" if (is_gw_auth or is_node_gw) else "#F4F3EE"
-    gw_pen = "3.5" if (is_gw_auth or is_node_gw) else "2.0"
-    gw_role = "[Root Cause Service]" if (is_gw_auth or is_node_gw) else "[Entrypoint]"
-
-    auth_color = (
-        "#1B4332" if is_auth_db else ("#52665A" if (is_gw_auth or is_node_gw) else "#1B4332")
-    )
-    auth_fill = (
-        "#D8F3DC" if is_auth_db else ("#FAF9F6" if (is_gw_auth or is_node_gw) else "#D8F3DC")
-    )
-    auth_pen = "3.5" if is_auth_db else "2.0"
-    auth_role = "[Root Cause Service]" if is_auth_db else "[Internal Service]"
-
-    db_color = "#1B4332" if (is_auth_db or is_node_db) else "#52665A"
-    db_fill = "#EBF3EE" if (is_auth_db or is_node_db) else "#FAF9F6"
-    db_pen = "2.5" if (is_auth_db or is_node_db) else "1.5"
-
-    c_fe_gw = edge_stats[("frontend", "gateway")]
-    c_gw_auth = edge_stats[("gateway", "auth-service")]
-    c_auth_db = edge_stats[("auth-service", "db-pool")]
+    ff = (failure_frontier or "").strip()
 
     dot_lines = [
         "digraph ServiceTopology {",
@@ -82,43 +26,93 @@ def generate_dag_dot(
         '  edge [fontname="Helvetica,Arial,sans-serif", fontsize=10, color="#52665A", fontcolor="#2C3E35"];',
         "",
         "  // Nodes",
-        f'  frontend [label="frontend\\n{fe_role}\\nCPU Spike (+125s)\\n(Red Herring)", fillcolor="{fe_fill}", color="{fe_color}", penwidth={fe_pen}];',
-        f'  gateway [label="gateway\\n{gw_role}\\nHTTP 504 Spikes (+95s)\\nerr_rate: 65%", fillcolor="{gw_fill}", color="{gw_color}", penwidth={gw_pen}];',
-        f'  "auth-service" [label="auth-service\\n{auth_role}\\nConnection Leak (+90s)\\nerr_rate: 35%", fillcolor="{auth_fill}", color="{auth_color}", penwidth={auth_pen}];',
-        f'  "db-pool" [label="db-pool\\n[Downstream Resource]\\nSaturation 20/20 (+90s)\\nQIF: 2.1 (Healthy Query Engine)", fillcolor="{db_fill}", color="{db_color}", penwidth={db_pen}];',
-        "",
-        "  // Edges with call counts and mean latencies",
     ]
 
-    # Edge 1: frontend -> gateway
-    if is_fe_gw:
+    nodes_list: list[dict[str, Any]] = []
+    edges_list: list[dict[str, Any]] = []
+
+    if dag_data and isinstance(dag_data, dict):
+        nodes_list = dag_data.get("nodes", []) or []
+        edges_list = dag_data.get("links", []) or dag_data.get("edges", []) or []
+
+    # If no nodes provided in dag_data but a failure frontier is specified, infer nodes
+    if not nodes_list and ff:
+        if "->" in ff:
+            parts = [p.strip() for p in ff.split("->")]
+            for p in parts:
+                nodes_list.append({"id": p, "error_rate": 0.0, "span_count": 0})
+            if not edges_list and len(parts) >= 2:
+                edges_list.append(
+                    {
+                        "source": parts[0],
+                        "target": parts[1],
+                        "call_count": 100,
+                        "mean_latency": 25.0,
+                    }
+                )
+        else:
+            nodes_list.append({"id": ff, "error_rate": 1.0, "span_count": 0})
+
+    # Render discovered nodes
+    rendered_node_ids = set()
+    for n in nodes_list:
+        nid = str(n.get("id", ""))
+        if not nid or nid in rendered_node_ids:
+            continue
+        rendered_node_ids.add(nid)
+
+        err_rate = float(n.get("error_rate", 0.0))
+        span_count = int(n.get("span_count", 0))
+        is_frontier_node = nid in ff
+
+        if is_frontier_node:
+            fill_color = "#D8F3DC"
+            border_color = "#1B4332"
+            pen_width = "3.5"
+            role_label = "[Failure Frontier]"
+        elif err_rate > 0.05:
+            fill_color = "#F4F3EE"
+            border_color = "#2D6A4F"
+            pen_width = "2.0"
+            role_label = f"[Error Rate: {err_rate * 100:.1f}%]"
+        else:
+            fill_color = "#FAF9F6"
+            border_color = "#52665A"
+            pen_width = "1.5"
+            role_label = "[Healthy]"
+
+        label_parts = [f'"{nid}"', role_label]
+        if span_count > 0:
+            label_parts.append(f"spans: {span_count}")
+        node_label = "\\n".join(label_parts)
+
         dot_lines.append(
-            f'  frontend -> gateway [label="FAILURE FRONTIER\\ncalls: {c_fe_gw["calls"]}, lat: {c_fe_gw["latency_ms"]:.1f}ms\\n(Client Retry Storm)", color="#1B4332", fontcolor="#1B4332", penwidth=4.0];'
-        )
-    else:
-        dot_lines.append(
-            f'  frontend -> gateway [label=" calls: {c_fe_gw["calls"]} \\n lat: {c_fe_gw["latency_ms"]:.1f}ms ", color="#52665A", penwidth=1.5];'
+            f'  "{nid}" [label="{node_label}", fillcolor="{fill_color}", color="{border_color}", penwidth={pen_width}];'
         )
 
-    # Edge 2: gateway -> auth-service
-    if is_gw_auth:
-        dot_lines.append(
-            f'  gateway -> "auth-service" [label="FAILURE FRONTIER\\ncalls: {c_gw_auth["calls"]}, lat: {c_gw_auth["latency_ms"]:.1f}ms\\n(Timeout / Upstream Stall)", color="#1B4332", fontcolor="#1B4332", penwidth=4.0];'
-        )
-    else:
-        dot_lines.append(
-            f'  gateway -> "auth-service" [label=" calls: {c_gw_auth["calls"]} \\n lat: {c_gw_auth["latency_ms"]:.1f}ms ", color="#52665A", penwidth=2.0];'
-        )
+    dot_lines.append("")
+    dot_lines.append("  // Edges with call counts and mean latencies")
 
-    # Edge 3: auth-service -> db-pool
-    if is_auth_db or is_node_db or (not is_fe_gw and not is_gw_auth and not is_node_gw):
-        dot_lines.append(
-            f'  "auth-service" -> "db-pool" [label="FAILURE FRONTIER\\ncalls: {c_auth_db["calls"]}, lat: {c_auth_db["latency_ms"]:.1f}ms\\n(Pool Leak: active=20, QIF=flat)", color="#1B4332", fontcolor="#1B4332", penwidth=4.0];'
-        )
-    else:
-        dot_lines.append(
-            f'  "auth-service" -> "db-pool" [label=" calls: {c_auth_db["calls"]} \\n lat: {c_auth_db["latency_ms"]:.1f}ms ", color="#52665A", penwidth=2.0];'
-        )
+    # Render edges
+    for e in edges_list:
+        src = str(e.get("source", "") or e.get("from", ""))
+        tgt = str(e.get("target", "") or e.get("to", ""))
+        if not src or not tgt:
+            continue
+
+        calls = int(e.get("call_count", 0))
+        lat = float(e.get("mean_latency", 0.0))
+
+        is_ff_edge = ff and (f"{src} -> {tgt}" in ff or f"{src}->{tgt}" in ff.replace(" ", ""))
+
+        if is_ff_edge:
+            dot_lines.append(
+                f'  "{src}" -> "{tgt}" [label="FAILURE FRONTIER\\ncalls: {calls}, lat: {lat:.1f}ms", color="#1B4332", fontcolor="#1B4332", penwidth=4.0];'
+            )
+        else:
+            dot_lines.append(
+                f'  "{src}" -> "{tgt}" [label=" calls: {calls} \\n lat: {lat:.1f}ms ", color="#52665A", penwidth=1.5];'
+            )
 
     dot_lines.append("}")
     return "\n".join(dot_lines)
@@ -126,19 +120,18 @@ def generate_dag_dot(
 
 def render_dag_panel(
     dag_data: dict[str, Any] | None = None,
-    failure_frontier: str | None = "auth-service -> db-pool",
+    failure_frontier: str | None = None,
 ) -> None:
     """Render the service dependency DAG and failure frontier analysis."""
     st.subheader("Service Topology & Failure Frontier")
 
-    ff = (failure_frontier or "auth-service -> db-pool").strip()
+    ff = (failure_frontier or "None detected").strip()
 
     ff_explanation = (
-        "The connection pool leak signature pinpoints the boundary between <code>auth-service</code> and <code>db-pool</code>. "
-        "Active connections reached 100% capacity (20/20) while queries in flight remained flat (2.1), localizing the fault "
-        "to the connection acquire/release boundary in <code>auth-service</code> rather than downstream database query execution."
-        if "auth-service" in ff and "db-pool" in ff
-        else f"Boundary localized to <code>{ff}</code>. Cross-service error propagation and metric onset ranking isolate this dependency hop as the earliest point of system breakdown."
+        f"Localized failure boundary: <code>{ff}</code>. Cross-service error propagation, call graph topology, "
+        "and metric onset ordering isolate this boundary as the earliest point of system breakdown."
+        if ff != "None detected"
+        else "No anomalous failure frontier identified. System dependencies are healthy or unobserved."
     )
 
     st.markdown(
@@ -162,30 +155,30 @@ def render_dag_panel(
         st.code(dot_str, language="dot")
 
     # Topology Summary Table
-    st.markdown("#### Service Topology Metrics & Role Assessment")
-    topo_col1, topo_col2 = st.columns(2)
-
-    with topo_col1:
-        st.markdown(
-            """
-            - **`auth-service`**: **Root Cause Origin**
-              - Unhandled exceptions skip `release()`.
-              - Clock skew: `+12.0s` uncorrected wall-clock offset.
-              - Onset timestamp: `t = +90.0s` (corrected).
-            - **`db-pool`**: **Resource Chokepoint**
-              - Fixed capacity `POOL_MAX = 20`.
-              - Queries in flight: Flat (`z = 2.09`, no database stall).
-            """
-        )
-
-    with topo_col2:
-        st.markdown(
-            """
-            - **`gateway`**: **User-Facing Symptom**
-              - Upstream timeout threshold: `3000ms`.
-              - Spikes to 65% HTTP 504 errors at `t = +95.0s`.
-            - **`frontend`**: **Red Herring / Amplifier**
-              - CPU utilization spikes to 88.5% at `t = +125.0s`.
-              - Lagged gateway errors by **30 seconds** due to client retries.
-            """
-        )
+    st.markdown("#### Discovered Service Metrics & Boundary Assessment")
+    nodes = (dag_data or {}).get("nodes", [])
+    if nodes:
+        col1, col2 = st.columns(2)
+        mid = (len(nodes) + 1) // 2
+        with col1:
+            for n in nodes[:mid]:
+                nid = n.get("id", "unknown")
+                err_rate = n.get("error_rate", 0.0)
+                spans = n.get("span_count", 0)
+                onset = n.get("metric_onset")
+                onset_str = f"+{onset / 1000.0:.1f}s" if onset else "None"
+                st.markdown(
+                    f"- **`{nid}`**: Error Rate: `{err_rate * 100:.1f}%` | Spans: `{spans}` | Onset: `{onset_str}`"
+                )
+        with col2:
+            for n in nodes[mid:]:
+                nid = n.get("id", "unknown")
+                err_rate = n.get("error_rate", 0.0)
+                spans = n.get("span_count", 0)
+                onset = n.get("metric_onset")
+                onset_str = f"+{onset / 1000.0:.1f}s" if onset else "None"
+                st.markdown(
+                    f"- **`{nid}`**: Error Rate: `{err_rate * 100:.1f}%` | Spans: `{spans}` | Onset: `{onset_str}`"
+                )
+    else:
+        st.info("No service topology metadata discovered yet.")

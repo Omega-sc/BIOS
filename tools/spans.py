@@ -1,7 +1,7 @@
 """Trace spans query and causality checking module (owned by P2).
 
 Handles span queries with clock skew correction, orphan span detection,
-causal DFS ordering within traces, and gateway root ordering across traces.
+causal DFS ordering within traces, and root ordering across traces.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ def query_spans(
         time_window: Optional (start_ms, end_ms) window interpreted in corrected time.
         trace_id: Optional filter for a specific trace ID.
         causal: If True, corrects clock skew and orders causally (DFS over parent_span_id
-                tree within trace, ordered across traces by gateway root span). If False,
+                tree within trace, ordered across traces by root span). If False,
                 orders by raw start_ms ASC.
         limit: Optional maximum number of spans to return.
 
@@ -134,17 +134,13 @@ def query_spans(
         for s in all_spans:
             traces[s.trace_id].append(s)
 
-        # 2. Determine trace ordering across traces by gateway root span corrected start time
+        # 2. Determine trace ordering across traces by root span corrected start time
         def get_trace_order_key(t_spans: list[Span]) -> int:
-            gw_spans = [s for s in t_spans if s.service == "gateway"]
-            if gw_spans:
-                return min(
-                    s.t_corrected_start_ms if s.t_corrected_start_ms is not None else s.start_ms
-                    for s in gw_spans
-                )
+            root_spans = [s for s in t_spans if s.parent_span_id is None]
+            spans_to_check = root_spans if root_spans else t_spans
             return min(
                 s.t_corrected_start_ms if s.t_corrected_start_ms is not None else s.start_ms
-                for s in t_spans
+                for s in spans_to_check
             )
 
         sorted_trace_ids = sorted(traces.keys(), key=lambda tid: get_trace_order_key(traces[tid]))

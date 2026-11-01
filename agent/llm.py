@@ -226,31 +226,54 @@ class LLMAdapter:
                     if t_name == "get_metric_derivatives" and "metric_name" in t_inp:
                         called_keys.add(f"get_metric_derivatives:{t_inp['metric_name']}")
 
-        # Sequence of tools to call across investigation phases
-        sequence = [
+        # Inspect prior messages for discovered metric onsets
+        first_anomalous_metric = None
+        for m in messages:
+            content = m.get("content") or m.get("result") or m.get("tool_result")
+            if (
+                m.get("tool") == "rank_metric_onsets" or m.get("name") == "rank_metric_onsets"
+            ) and content:
+                import json
+
+                try:
+                    data = json.loads(content) if isinstance(content, str) else content
+                    if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
+                        first_anomalous_metric = data[0].get("metric") or data[0].get("metric_name")
+                except Exception:
+                    pass
+
+        # Dynamic sequence of tools to call across investigation phases
+        sequence: list[tuple[str, dict[str, Any], str]] = [
             ("estimate_clock_offsets", {}, "estimate_clock_offsets"),
             ("rank_metric_onsets", {}, "rank_metric_onsets"),
-            (
-                "get_metric_derivatives",
-                {"metric_name": "db_pool.active_connections"},
-                "get_metric_derivatives:db_pool.active_connections",
-            ),
-            ("query_spans", {"causal": True, "limit": 50}, "query_spans"),
-            ("build_dependency_dag", {}, "build_dependency_dag"),
-            ("failure_frontier", {}, "failure_frontier"),
-            ("fit_sim_params", {}, "fit_sim_params"),
-            ("run_counterfactual", {"intervention": "fix_leak"}, "run_counterfactual:fix_leak"),
-            (
-                "run_counterfactual",
-                {"intervention": "pool_size=50"},
-                "run_counterfactual:pool_size=50",
-            ),
-            (
-                "run_counterfactual",
-                {"intervention": "no_retries"},
-                "run_counterfactual:no_retries",
-            ),
         ]
+        if first_anomalous_metric:
+            sequence.append(
+                (
+                    "get_metric_derivatives",
+                    {"metric_name": first_anomalous_metric},
+                    f"get_metric_derivatives:{first_anomalous_metric}",
+                )
+            )
+        sequence.extend(
+            [
+                ("query_spans", {"causal": True, "limit": 50}, "query_spans"),
+                ("build_dependency_dag", {}, "build_dependency_dag"),
+                ("failure_frontier", {}, "failure_frontier"),
+                ("fit_sim_params", {}, "fit_sim_params"),
+                ("run_counterfactual", {"intervention": "fix_leak"}, "run_counterfactual:fix_leak"),
+                (
+                    "run_counterfactual",
+                    {"intervention": "pool_size=50"},
+                    "run_counterfactual:pool_size=50",
+                ),
+                (
+                    "run_counterfactual",
+                    {"intervention": "no_retries"},
+                    "run_counterfactual:no_retries",
+                ),
+            ]
+        )
 
         for tool_name, default_args, key_check in sequence:
             if key_check not in called_keys:

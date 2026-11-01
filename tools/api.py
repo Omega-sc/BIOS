@@ -109,14 +109,14 @@ def get_tool_specs() -> list[dict[str, Any]]:
         },
         {
             "name": "query_spans",
-            "description": "Query distributed trace spans with clock correction, orphan detection, and causal ordering (DFS within trace, gateway root order across traces). Returns capped JSON summary.",
+            "description": "Query distributed trace spans with clock correction, orphan detection, and causal ordering (DFS within trace, root order across traces). Returns capped JSON summary.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "db": {"type": "string", "description": "Path to SQLite database."},
                     "service": {
                         "type": "string",
-                        "description": "Optional filter by service name (e.g. 'auth-service', 'gateway', 'db-pool').",
+                        "description": "Optional filter by service name.",
                     },
                     "status_code": {
                         "type": "integer",
@@ -152,7 +152,7 @@ def get_tool_specs() -> list[dict[str, Any]]:
                     "db": {"type": "string", "description": "Path to SQLite database."},
                     "metric_name": {
                         "type": "string",
-                        "description": "Name of metric (e.g. 'db_pool.active_connections').",
+                        "description": "Name of metric (e.g. target metric series name).",
                     },
                 },
                 "required": ["db", "metric_name"],

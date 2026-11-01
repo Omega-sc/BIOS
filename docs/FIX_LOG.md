@@ -108,3 +108,49 @@
 
 ### 3. Remaining Gaps & Limits
 - Detector logic for resource leaks, retry storms, slow DB, and timeout misconfigurations currently lives in `agent/scoring.py` heuristic rules; Phase 3 will decompose these into formal deterministic detector functions bound to discovered entities.
+
+---
+
+## Phase 7: Generalization Guards, Dynamic UI Panels & Documentation Alignment
+
+### 1. Architectural & Codebase Changes
+- **AST Hardcoding Linter Guard (`eval/lint_hardcode.py` & `Makefile`)**:
+  - Implemented an automated AST linter that dynamically extracts scenario services, metrics, and key log phrases from `data/telemetry.jsonl` and scans Python string constants in `agent/`, `tools/`, `sim/`, `ui/`, `ingest/`.
+  - Added `make lint-hardcode` and `make blind-check` targets to `Makefile`, making them mandatory gates in `make check`.
+- **Purge of Hardcoded Scenario Literals**:
+  - Removed all literals (`auth-service`, `gateway`, `db-pool`, `frontend`, `db_pool.active_connections`, `frontend.cpu_pct`, `gateway.error_rate_5xx`, and scenario log phrases) from `tools/api.py`, `agent/prompts.py`, `agent/llm.py`, `agent/scoring.py`, `agent/nodes/telemetry_ingestion.py`, `ui/app.py`, `ui/panels/counterfactual.py`, `ui/panels/dag_view.py`, `ui/panels/raw_telemetry.py`, and `ui/panels/timeline.py`.
+  - In `agent/llm.py` and `agent/nodes/telemetry_ingestion.py`, dynamically query the earliest anomalous metric onset from tool results or database rather than naming a specific metric.
+- **Dynamic Topology DAG View (`ui/panels/dag_view.py`)**:
+  - Replaced hardcoded DOT graph and static summary table with dynamic iteration over `dag_data["nodes"]` and `dag_data["links"]`.
+  - Highlights the failure frontier edge or deepest failing node dynamically using the Jungle Green / Off-White palette.
+  - Rewrote `tests/test_ui.py::test_dag_dot_generation` to test dynamic invariants (digraph syntax, frontier boundary, call/latency edge attributes) rather than scenario service literals.
+- **Dynamic Raw Telemetry Panel (`ui/panels/raw_telemetry.py`)**:
+  - Service filter dropdown is populated dynamically via `SELECT DISTINCT service` across SQLite tables.
+  - Clock skew highlighting (`is_skewed`) is derived dynamically from estimated clock offsets (`abs(offset) >= 0.5s`).
+  - Sample evidence IDs are queried directly from real rows in the loaded database.
+  - Relative timestamps calculate time deltas against `min(start_ms)` of observed spans.
+- **Dynamic Timeline Panel (`ui/panels/timeline.py`)**:
+  - Dynamically assigns Y-axis categorical levels and palette colors to all discovered services.
+  - Calculates relative seconds from earliest corrected event timestamp.
+  - Dynamic skew toggle and captions display estimated offsets per service without hardcoded names.
+- **Dynamic Post-Mortem & Counterfactual Panels**:
+  - Post-mortem panel renders a healthy control banner when `incident_detected=False`, renders `UNRESOLVED` badges for weak/ambiguous evidence, lists `missing_evidence`, and reports `investigation_seconds`, `data_quality`, and `limitations`.
+  - Counterfactual view refers generically to "Upstream ingress timeout threshold" rather than naming specific services.
+- **Documentation Alignment (`README.md` & `docs/script.md`)**:
+  - Documented prerequisites for each claim, analytical mechanisms, and graceful degradation behavior under trace loss, packet loss, and healthy control data.
+  - Aligned presentation script Q&A with evaluation results (100% Top-1 accuracy, 0.0038 Brier score) and added authoritative answers on telemetry corruption, abstention, and AST generalization guards.
+
+### 2. Empirical Verification & Evidence
+- **Hardcode Linter (`eval/lint_hardcode.py`)**:
+  - **0 violations found** across `agent/`, `tools/`, `sim/`, `ui/`, `ingest/`.
+- **Blind Mutation Suite (`eval/blind/blind_check.py`)**:
+  - **4/4 PASSED**:
+    - `renamed services/metrics`: PASS (cites real names only)
+    - `no skew present`: PASS (does not invent clock skew)
+    - `replay mode with different data`: PASS (re-runs investigation on hash mismatch)
+    - `no-incident control`: PASS (abstains with `incident_detected=False`)
+- **Unit & Integration Tests (`tests/`)**:
+  - **66/66 PASSED** in 35.7s.
+- **Linting & Formatting (`ruff`)**:
+  - Clean: 0 errors, all files formatted.
+

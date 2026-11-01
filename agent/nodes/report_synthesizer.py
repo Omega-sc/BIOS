@@ -21,7 +21,7 @@ REMEDIATION_RECOMMENDATIONS = [
     "Ensure database connections are released in try-finally or context managers across all exit paths.",
     "Implement connection pool leak detection threshold and watchdog alerts on saturation.",
     "Configure client retries with exponential backoff and randomized jitter to prevent retry storms.",
-    "Introduce gateway circuit breaker to shed load when downstream auth and database dependencies timeout.",
+    "Introduce ingress circuit breaker to shed load when downstream dependencies timeout.",
 ]
 
 

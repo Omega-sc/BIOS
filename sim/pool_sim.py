@@ -1,4 +1,4 @@
-"""Discrete event simulation for db-pool exhaustion and counterfactual interventions (owned by P2)."""
+"""Discrete event simulation for connection pool exhaustion and counterfactual interventions (owned by P2)."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def simulate_pool(params: SimParams, n_runs: int = 300) -> tuple[float, tuple[fl
       - Exponential/Poisson request arrivals over window_s
       - Connection acquisition from pool with capacity pool_size
       - Random leak probability where connections are permanently withheld
-      - Acquire timeout and gateway 504 timeout thresholds
+      - Acquire timeout and ingress timeout thresholds
       - Optional client retries up to retry_max
 
     Args:
@@ -144,7 +144,7 @@ def run_counterfactual(
         assumptions = [
             "Client retry backoff eliminated (retries = 0) upon 504 timeout",
             "Failure onset and underlying connection exhaustion remain unchanged; retries act as amplifier",
-            "Leaked connections in auth-service pool remain unreleased",
+            "Leaked connections in service pool remain unreleased",
         ]
     else:
         assumptions = [

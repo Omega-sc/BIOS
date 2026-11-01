@@ -69,30 +69,32 @@ def telemetry_ingestion_node(state: IncidentState) -> Iterator[AgentEvent]:
     state.record_event(tr_onsets)
     yield tr_onsets
 
-    # 3. Compute metric derivatives for primary pool metric
-    tc_deriv = AgentEvent(
-        type="tool_call",
-        node="telemetry_ingestion",
-        payload={
-            "tool": "get_metric_derivatives",
-            "args": {"db": state.db_path, "metric_name": "db_pool.active_connections"},
-        },
-    )
-    state.record_event(tc_deriv)
-    yield tc_deriv
+    # 3. Compute metric derivatives for earliest anomalous metric (if any)
+    if onsets:
+        target_metric = onsets[0].metric
+        tc_deriv = AgentEvent(
+            type="tool_call",
+            node="telemetry_ingestion",
+            payload={
+                "tool": "get_metric_derivatives",
+                "args": {"db": state.db_path, "metric_name": target_metric},
+            },
+        )
+        state.record_event(tc_deriv)
+        yield tc_deriv
 
-    deriv = get_metric_derivatives(state.db_path, "db_pool.active_connections")
+        deriv = get_metric_derivatives(state.db_path, target_metric)
 
-    tr_deriv = AgentEvent(
-        type="tool_result",
-        node="telemetry_ingestion",
-        payload={
-            "tool": "get_metric_derivatives",
-            "result": deriv.model_dump(),
-        },
-    )
-    state.record_event(tr_deriv)
-    yield tr_deriv
+        tr_deriv = AgentEvent(
+            type="tool_result",
+            node="telemetry_ingestion",
+            payload={
+                "tool": "get_metric_derivatives",
+                "result": deriv.model_dump(),
+            },
+        )
+        state.record_event(tr_deriv)
+        yield tr_deriv
 
     # 4. Query sample causal spans
     tc_spans = AgentEvent(

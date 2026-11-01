@@ -201,7 +201,7 @@ def render_counterfactual_panel(
             - **Service Times**: Exponential distribution with mean $\\mu = {params.mean_service_ms:.1f}\\text{{ ms}}$ derived from database acquires.
             - **Connection Pool**: Base capacity $K = {params.pool_size}$ with FIFO wait queue.
             - **Connection Leak**: Unreleased connection probability $p_{{\\text{{leak}}}} = {params.leak_prob:.4f}$ on unhandled error paths.
-            - **Timeout Thresholds**: Gateway HTTP 504 threshold at ${params.gateway_timeout_ms}\\text{{ ms}}$; pool acquire timeout at ${params.acquire_timeout_ms}\\text{{ ms}}$.
+            - **Timeout Thresholds**: Upstream ingress timeout threshold at ${params.gateway_timeout_ms}\\text{{ ms}}$; pool acquire timeout at ${params.acquire_timeout_ms}\\text{{ ms}}$.
             - **Client Retries**: Exponential backoff with maximum {params.retry_max} retries.
             """
         )

@@ -160,7 +160,7 @@ def evaluate_hypotheses_from_db(
             mid_name = mid_svc or "upstream service"
             root_name = root_svc or "entrypoint service"
             leaf_name = leaf_svc or "downstream database"
-            client_name = client_svc or "client frontend"
+            client_name = client_svc or "client service"
             return [
                 HypothesisEvaluated(
                     id="H1",
@@ -223,19 +223,19 @@ def evaluate_hypotheses_from_db(
         qif_metric = None
         gw_err_metric = None
         cpu_metric = None
-        auth_lat_metric = None
+        mid_lat_metric = None
 
         for m in all_metrics:
-            if "active_connection" in m or m == "db_pool.active_connections":
+            if "active_connection" in m or "conn" in m:
                 pool_metric = m
-            elif "queries_in_flight" in m or m == "db_pool.queries_in_flight":
+            elif "queries_in_flight" in m or "qif" in m or "flight" in m:
                 qif_metric = m
-            elif "error_rate" in m or "5xx" in m or m == "gateway.error_rate_5xx":
+            elif "error_rate" in m or "5xx" in m or "err" in m:
                 gw_err_metric = m
-            elif "cpu" in m or m == "frontend.cpu_pct":
+            elif "cpu" in m:
                 cpu_metric = m
-            elif "latency" in m or "p99" in m or m == "auth.latency_p99":
-                auth_lat_metric = m
+            elif "latency" in m or "p99" in m or "duration" in m:
+                mid_lat_metric = m
 
         if not pool_metric and leaf_svc and has_metrics:
             cur.execute(
@@ -260,15 +260,15 @@ def evaluate_hypotheses_from_db(
             if r:
                 cpu_metric = r[0]
 
-        if not auth_lat_metric and mid_svc and has_metrics:
+        if not mid_lat_metric and mid_svc and has_metrics:
             cur.execute("SELECT metric FROM metrics WHERE service = ? LIMIT 1", (mid_svc,))
             r = cur.fetchone()
             if r:
-                auth_lat_metric = r[0]
+                mid_lat_metric = r[0]
 
         target_metrics = [
             m
-            for m in [pool_metric, qif_metric, gw_err_metric, cpu_metric, auth_lat_metric]
+            for m in [pool_metric, qif_metric, gw_err_metric, cpu_metric, mid_lat_metric]
             if m is not None
         ]
 
@@ -323,10 +323,10 @@ def evaluate_hypotheses_from_db(
                 )
 
         # 2. Extract logs with actual IDs
-        auth_leak_pointers = []
-        fe_storm_pointers = []
-        db_slow_pointers = []
-        gw_misconfig_pointers = []
+        leak_pointers = []
+        storm_pointers = []
+        slow_query_pointers = []
+        misconfig_pointers = []
         has_pool_exhausted_log = False
 
         if has_logs:
@@ -336,7 +336,7 @@ def evaluate_hypotheses_from_db(
                 "(message LIKE '%leak%' OR message LIKE '%release%') ORDER BY ts_ms ASC LIMIT 3"
             )
             auth_leak_rows = cur.fetchall()
-            auth_leak_pointers = [
+            leak_pointers = [
                 EvidencePointer(kind="log", id=r[0], note=r[2]) for r in auth_leak_rows
             ]
 
@@ -347,7 +347,7 @@ def evaluate_hypotheses_from_db(
                 "ORDER BY ts_ms ASC LIMIT 3"
             )
             fe_storm_rows = cur.fetchall()
-            fe_storm_pointers = [
+            storm_pointers = [
                 EvidencePointer(kind="log", id=r[0], note=r[2]) for r in fe_storm_rows
             ]
 
@@ -357,7 +357,7 @@ def evaluate_hypotheses_from_db(
                 "(message LIKE '%slow%' OR message LIKE '%timeout%') ORDER BY ts_ms ASC LIMIT 3"
             )
             db_slow_rows = cur.fetchall()
-            db_slow_pointers = [
+            slow_query_pointers = [
                 EvidencePointer(kind="log", id=r[0], note=r[2]) for r in db_slow_rows
             ]
 
@@ -367,7 +367,7 @@ def evaluate_hypotheses_from_db(
                 "(message LIKE '%misconfig%' OR message LIKE '%timeout%') ORDER BY ts_ms ASC LIMIT 3"
             )
             gw_misconfig_rows = cur.fetchall()
-            gw_misconfig_pointers = [
+            misconfig_pointers = [
                 EvidencePointer(kind="log", id=r[0], note=r[2]) for r in gw_misconfig_rows
             ]
 
@@ -429,7 +429,7 @@ def evaluate_hypotheses_from_db(
     pool_onset = onsets.get(pool_metric) if pool_metric else None
     gw_onset = onsets.get(gw_err_metric) if gw_err_metric else None
     cpu_onset = onsets.get(cpu_metric) if cpu_metric else None
-    acquires_exceed_releases = bool(auth_leak_pointers or has_pool_exhausted_log)
+    acquires_exceed_releases = bool(leak_pointers or has_pool_exhausted_log)
 
     # Estimate capacity from data plateau
     pool_capacity = max(10.0, active_peak)
@@ -455,7 +455,7 @@ def evaluate_hypotheses_from_db(
 
     if acquires_exceed_releases:
         w_h1 *= w.get("log_leak", 5.0)
-        h1_supporting.extend(auth_leak_pointers)
+        h1_supporting.extend(leak_pointers)
 
     if q_peak <= 8.0:
         w_h1 *= 1.5
@@ -493,9 +493,9 @@ def evaluate_hypotheses_from_db(
         if gw_err_metric and f"{gw_err_metric}_onset" in sample_pointers:
             h2_refuting.append(sample_pointers[f"{gw_err_metric}_onset"])
 
-    if fe_storm_pointers:
+    if storm_pointers:
         w_h2 *= 2.0
-        h2_supporting.extend(fe_storm_pointers)
+        h2_supporting.extend(storm_pointers)
     elif cpu_metric and f"{cpu_metric}_peak" in sample_pointers:
         h2_supporting.append(sample_pointers[f"{cpu_metric}_peak"])
 
@@ -513,17 +513,17 @@ def evaluate_hypotheses_from_db(
         if qif_metric and f"{qif_metric}_peak" in sample_pointers:
             h3_refuting.append(sample_pointers[f"{qif_metric}_peak"])
 
-    if db_slow_pointers:
+    if slow_query_pointers:
         w_h3 *= w.get("log_slow_db", 10.0)
-        h3_supporting.extend(db_slow_pointers)
+        h3_supporting.extend(slow_query_pointers)
 
     # --- H4: Timeout Misconfiguration ---
     w_h4 = 1.0
     h4_supporting: list[EvidencePointer] = []
     h4_refuting: list[EvidencePointer] = []
 
-    auth_lat = peaks.get(auth_lat_metric, 0.0) if auth_lat_metric else 0.0
-    if gw_504_pointer and active_peak < 6.0 and auth_lat < 100.0:
+    mid_lat = peaks.get(mid_lat_metric, 0.0) if mid_lat_metric else 0.0
+    if gw_504_pointer and active_peak < 6.0 and mid_lat < 100.0:
         w_h4 *= w.get("metric_gw_isolated_failure", 10.0)
         h4_supporting.append(gw_504_pointer)
     else:
@@ -531,9 +531,9 @@ def evaluate_hypotheses_from_db(
         if pool_metric and f"{pool_metric}_peak" in sample_pointers:
             h4_refuting.append(sample_pointers[f"{pool_metric}_peak"])
 
-    if gw_misconfig_pointers:
+    if misconfig_pointers:
         w_h4 *= w.get("log_gw_misconfig", 10.0)
-        h4_supporting.extend(gw_misconfig_pointers)
+        h4_supporting.extend(misconfig_pointers)
 
     weights_dict = {"H1": w_h1, "H2": w_h2, "H3": w_h3, "H4": w_h4}
     # Normalize with explicit 'none of the above' prior mass
@@ -580,7 +580,7 @@ def evaluate_hypotheses_from_db(
     elif (
         best_hyp_id == "H1"
         and best_verdict == "root_cause"
-        and (fe_storm_pointers or (cpu_onset and gw_onset and cpu_onset >= gw_onset))
+        and (storm_pointers or (cpu_onset and gw_onset and cpu_onset >= gw_onset))
     ):
         v_h2 = "contributing_factor"
     else:
@@ -592,7 +592,7 @@ def evaluate_hypotheses_from_db(
     mid_name = mid_svc or "upstream service"
     root_name = root_svc or "entrypoint service"
     leaf_name = leaf_svc or "downstream database"
-    client_name = client_svc or "client frontend"
+    client_name = client_svc or "client service"
 
     h1 = HypothesisEvaluated(
         id="H1",

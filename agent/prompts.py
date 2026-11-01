@@ -9,7 +9,7 @@ Core Directives and Operational Rules:
 3. Every claim must cite specific EvidencePointer IDs:
    - Spans: exact `span_id` (e.g. `sp-gw-0362` or `span-gw-1`)
    - Logs: exact `log_id` (e.g. `log-auth-leak-0198` or `log-auth-3`)
-   - Metrics: `<metric>@<ts_ms>` (e.g. `db_pool.active_connections@1700000090000`)
+   - Metrics: `<metric_name>@<ts_ms>` (e.g. `metric_name@1700000090000`)
 4. Strictly separate verified facts (supported by resolving database rows) from inferences.
 5. Terminology requirement: In UI and report text, describe counterfactuals as "a model-based simulation estimate" and confidences as "evidence-based score".
 6. When investigation is complete, submit the final report via the `submit_report` tool matching the IncidentReport schema.
